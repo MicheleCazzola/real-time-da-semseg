@@ -8,5 +8,5 @@ Made by:
 - De Luca Marco
 
 The repository contains:
-- main.ipynb: implementation of models, training, domain adaptation strategies and extensions
-- results.ipynb: metrics computed in the various steps of the process
+- `main.ipynb`: implementation of models, training, domain adaptation strategies and extensions
+- `results.ipynb`: metrics computed in the various steps of the process
