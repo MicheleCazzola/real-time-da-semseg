@@ -24,8 +24,8 @@ using the following techniques to mitigate domain shift:
 ## Repository structure
 
 The repository is structured as follows:
-- `models`: definition of the models
-- `losses`: definition of the losses (CrossEntropy, Bondary, Focal, OHEM)
+- `models/`: definition of the models
+- `losses/`: definition of the losses (CrossEntropy, Bondary, Focal, OHEM)
 - `main.ipynb`: implementation of training, domain adaptation strategies and extensions
 - `results.ipynb`: performance computed in the various steps of the process
 - `report.pdf`: final report of the project, in PDF format
