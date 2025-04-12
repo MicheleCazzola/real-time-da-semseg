@@ -22,9 +22,13 @@ using the following techniques to mitigate domain shift:
 - image-to-image translation (Domain Adaptation via Cross-Domain Mixed Sampling, `DACS`).
 
 ## Repository structure
-The main files of the repository are the following notebooks:
-- `main.ipynb`: implementation of models, training, domain adaptation strategies and extensions
-- `results.ipynb`: metrics computed in the various steps of the process
+
+The repository is structured as follows:
+- `models`: definition of the models
+- `losses`: definition of the losses (CrossEntropy, Bondary, Focal, OHEM)
+- `main.ipynb`: implementation of training, domain adaptation strategies and extensions
+- `results.ipynb`: performance computed in the various steps of the process
+- `report.pdf`: final report of the project, in PDF format
 
 ## Dataset
 The dataset used is LoveDA [[PDF](https://arxiv.org/pdf/2110.08733)], natively built for domain adaptation tasks in semantic segmentation. Indeed, it contains several images (with the related masks) divided into `urban` and `rural` domain.
@@ -42,18 +46,18 @@ The project is structured in several parts:
 We summarized our work and showed our results in the project report [[PDF](report.pdf)]
 
 ## Main References
-Semantic Segmentation: "A Brief Survey on Semantic Segmentation with Deep Learning", Shijie Hao, Yuan Zhou, Yanrong Guo [[PDF](https://arxiv.org/abs/1912.10230)] 
+**Semantic Segmentation**: "A Brief Survey on Semantic Segmentation with Deep Learning", Shijie Hao, Yuan Zhou, Yanrong Guo [[PDF](https://arxiv.org/abs/1912.10230)] 
 
-DeepLab: "DeepLab: Semantic Image Segmentation with Deep Convolutional Nets, Atrous Convolution, and Fully Connected CRFS", Liang-Chieh Chen, George Papandreou, Iasonas Kokkinos, Kevin Murphy, Alan L. Yuille [[PDF](https://arxiv.org/pdf/1606.00915.pdf)]
+**LoveDA dataset**: "LoveDA: A Remote Sensing Land-Cover Dataset for Domain Adaptive Semantic Segmentation", Junjue Wang, Zhuo Zheng, Ailong Ma, Xiaoyan Lu, Yanfei Zhong [[PDF](https://arxiv.org/abs/2110.08733)]
 
-BiSeNet: "BiSeNet: Bilateral Segmentation Network for Real-time Semantic Segmentation", Changqian Yu, Jingbo Wang, Chao Peng, Changxin Gao, Gang Yu, Nong Sang [[PDF](https://arxiv.org/pdf/1808.00897.pdf)]
+**DeepLab**: "DeepLab: Semantic Image Segmentation with Deep Convolutional Nets, Atrous Convolution, and Fully Connected CRFS", Liang-Chieh Chen, George Papandreou, Iasonas Kokkinos, Kevin Murphy, Alan L. Yuille [[PDF](https://arxiv.org/pdf/1606.00915.pdf)]
 
-PidNet: "PidNet: A Real-time Semantic Segmentation Network Inspired by PID Controllers", Jiacong Xu, Zixiang Xiong, Shankar P. Bhattacharyya [[PDF](https://arxiv.org/abs/2206.02066)]
+**PidNet**: "PidNet: A Real-time Semantic Segmentation Network Inspired by PID Controllers", Jiacong Xu, Zixiang Xiong, Shankar P. Bhattacharyya [[PDF](https://arxiv.org/abs/2206.02066)]
 
-LoveDA dataset: "LoveDA: A Remote Sensing Land-Cover Dataset for Domain Adaptive Semantic Segmentation", Junjue Wang, Zhuo Zheng, Ailong Ma, Xiaoyan Lu, Yanfei Zhong [[PDF](https://arxiv.org/abs/2110.08733)]
+**Adversarial Domain Adaptation**: "Learning to Adapt Structured Output Space for Semantic Segmentation", Yi-Hsuan Tsai, Wei-Chih Hung, Samuel Schulter, Kihyuk Sohn, Ming-Hsuan Yang, Manmohan Chandraker [[PDF](https://openaccess.thecvf.com/content_cvpr_2018/papers/Tsai_Learning_to_Adapt_CVPR_2018_paper.pdf)]
 
-Adversarial Domain Adaptation: "Learning to Adapt Structured Output Space for Semantic Segmentation", Yi-Hsuan Tsai, Wei-Chih Hung, Samuel Schulter, Kihyuk Sohn, Ming-Hsuan Yang, Manmohan Chandraker [[PDF](https://openaccess.thecvf.com/content_cvpr_2018/papers/Tsai_Learning_to_Adapt_CVPR_2018_paper.pdf)]
+**DACS**: "DACS: Domain Adaptation via Cross-domain Mixed Sampling", Wilhelm Tranheden, Viktor Olsson, Juliano Pinto, Lennart Svensson [[PDF](https://arxiv.org/pdf/2007.08702.pdf)]
 
-DACS: "DACS: Domain Adaptation via Cross-domain Mixed Sampling", Wilhelm Tranheden, Viktor Olsson, Juliano Pinto, Lennart Svensson [[PDF](https://arxiv.org/pdf/2007.08702.pdf)]
+**BiSeNet**: "BiSeNet: Bilateral Segmentation Network for Real-time Semantic Segmentation", Changqian Yu, Jingbo Wang, Chao Peng, Changxin Gao, Gang Yu, Nong Sang [[PDF](https://arxiv.org/pdf/1808.00897.pdf)]
 
-STDC: "Rethinking BiSeNet For Real-time Semantic Segmentation", Mingyuan Fan, Shenqi Lai, Junshi Huang, Xiaoming Wei, Zhenhua Chai, Junfeng Luo, Xiaolin Wei [[PDF](https://arxiv.org/abs/2104.13188)]
+**STDC**: "Rethinking BiSeNet For Real-time Semantic Segmentation", Mingyuan Fan, Shenqi Lai, Junshi Huang, Xiaoming Wei, Zhenhua Chai, Junfeng Luo, Xiaolin Wei [[PDF](https://arxiv.org/abs/2104.13188)]
