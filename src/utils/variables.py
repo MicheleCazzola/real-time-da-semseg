@@ -3,7 +3,8 @@ import torch
 from enum import Enum
 
 DRIVE_BASE_DIR = '/content/drive'
-DATA_DIR = 'loveDA_dataset'
+PROJECT_DIR = 'real_time_da_semseg'
+DATA_DIR = f'{PROJECT_DIR}/loveDA_dataset'
 TRAIN_ZIP = f'{DATA_DIR}/train.zip'
 VAL_ZIP = f'{DATA_DIR}/validation.zip'
 TEST_ZIP = f'{DATA_DIR}/test.zip'
@@ -14,8 +15,8 @@ RURAL_PATH = "Rural"
 URBAN_PATH = "Urban"
 IMG_PATH = "images_png"
 MASK_PATH = "masks_png"
-PRETRAINED_WEIGHTS_DIR = 'pretrained_weights'
-DEEPLAB_V2_CHP_DIR = f"{DRIVE_BASE_DIR}/checkpoints/deeplab_v2/"
+PRETRAINED_WEIGHTS_DIR = f'{PROJECT_DIR}/pretrained_weights'
+DEEPLAB_V2_CHP_DIR = f"{DRIVE_BASE_DIR}/MyDrive/{PROJECT_DIR}/checkpoints/deeplab_v2/"
 DEEPLAB_V2_WEIGHTS = f'{PRETRAINED_WEIGHTS_DIR}/DeepLab_resnet_pretrained_imagenet.pth'
 DEEPLAB_V2_ID = "1ZX0UCXvJwqd2uBGCX7LI2n-DfMg3t74v"
 PIDNET_S_WEIGHTS = f"{PRETRAINED_WEIGHTS_DIR}/pidnet_s_imagenet_pretrained.pth"
