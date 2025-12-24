@@ -3,10 +3,10 @@ import torch.nn as nn
 from torch.nn import functional as F
 import torch.nn.utils.clip_grad as clip_grad
 
-from models.bisenet import BiSeNet
-from models.discriminator import FCDiscriminator
-from models.pidnet import PIDNet
-from models.stdc import STDC
+from src.models.bisenet import BiSeNet
+from src.models.discriminator import FCDiscriminator
+from src.models.pidnet import PIDNet
+from src.models.stdc import STDC
 from src.utils.variables import device, num_classes
 from src.train.utils import train_forward_source, train_forward_target, evaluate_model
 from src.utils.utils import get_mious_per_category

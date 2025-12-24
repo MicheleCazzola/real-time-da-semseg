@@ -1,14 +1,14 @@
 from torch.utils.data import DataLoader
 import albumentations as A
 
-from models.bisenet import BiSeNet
-from models.pidnet import PIDNet
-from models.stdc import STDC
+from src.models.bisenet import BiSeNet
+from src.models.pidnet import PIDNet
+from src.models.stdc import STDC
 from src.dataset.dataset import LoveDA
 from src.utils.variables import TRAIN_DIR, VAL_DIR, IMG_PATH, MASK_PATH
-from train.bisenet import evaluate_bisenet
-from train.pidnet import evaluate_pidnet
-from train.stdc import evaluate_stdc
+from src.train.bisenet import evaluate_bisenet
+from src.train.pidnet import evaluate_pidnet
+from src.train.stdc import evaluate_stdc
 
 
 def trainset_setup(avg, std, resize, dir_path, num_workers, batch_size, g, seed_worker, augmentations=A.NoOp(p=1)):

@@ -8,9 +8,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from losses.pidnet import pidnet_loss
-from models.bisenet import BiSeNet
-from models.stdc import STDC
+from src.losses.pidnet import pidnet_loss
+from src.models.bisenet import BiSeNet
+from src.models.stdc import STDC
 from src.dataset.dataset import generate_bd
 from src.models.pidnet import FullPIDNetModel, PIDNet
 from src.losses.bondary import BondaryLoss
@@ -18,7 +18,7 @@ from src.losses.cross_entropy import CrossEntropy
 from src.train.pidnet import evaluate_pidnet, get_pidnet
 from src.utils.variables import num_classes, PIDNET_S_WEIGHTS, IGNORE_INDEX, device, categories
 from src.utils.utils import get_mious_per_category
-from train.utils import evaluate_model, train_forward_source, train_forward_target
+from src.train.utils import evaluate_model, train_forward_source, train_forward_target
 
 
 def oneMix(mask, data = None, target = None):

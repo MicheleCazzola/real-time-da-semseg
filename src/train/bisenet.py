@@ -3,10 +3,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 
-from metrics.metrics import calculate_iou
+from src.metrics.metrics import calculate_iou
 from src.models.bisenet import BiSeNet
 from src.utils.variables import num_classes, device, IGNORE_INDEX
-from utils.utils import get_mious_per_category
+from src.utils.utils import get_mious_per_category
 
 def bisenet_model_setup(backbone_name, learning_rate, weight_decay, step_size, gamma):
     

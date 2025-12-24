@@ -1,6 +1,6 @@
 import torch
 
-from metrics.metrics import calculate_iou
+from src.metrics.metrics import calculate_iou
 from src.losses.bondary import BondaryLoss
 from src.losses.cross_entropy import CrossEntropy
 from src.utils.variables import num_classes, device, PIDNET_S_WEIGHTS, IGNORE_INDEX, categories
