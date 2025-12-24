@@ -2,7 +2,7 @@ import os
 import torch
 from enum import Enum
 
-DRIVE_BASE_DIR = '/content/drive/MyDrive'
+DRIVE_BASE_DIR = '/content/drive'
 DATA_DIR = 'loveDA_dataset'
 TRAIN_ZIP = f'{DATA_DIR}/train.zip'
 VAL_ZIP = f'{DATA_DIR}/validation.zip'

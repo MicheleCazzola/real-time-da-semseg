@@ -12,13 +12,14 @@ from src.dataset.dataset import LoveDA
 from src.utils.variables import categories, device, DRIVE_BASE_DIR, DATA_DIR, IMG_PATH, MASK_PATH, RURAL_PATH, TRAIN_DIR, URBAN_PATH, VAL_DIR, TEST_DIR, TRAIN_ZIP, VAL_ZIP, TEST_ZIP
 
 def download_to_gdrive():
-    data_path_dir = f'{DRIVE_BASE_DIR}/{DATA_DIR}'
-    train_path_zip = f'{DRIVE_BASE_DIR}/{TRAIN_ZIP}'
-    val_path_zip = f'{DRIVE_BASE_DIR}/{VAL_ZIP}'
-    test_path_zip = f'{DRIVE_BASE_DIR}/{TEST_ZIP}'
-    train_path_dir = f'{DRIVE_BASE_DIR}/{TRAIN_DIR}'
-    val_path_dir = f'{DRIVE_BASE_DIR}/{VAL_DIR}'
-    test_path_dir = f'{DRIVE_BASE_DIR}/{TEST_DIR}'
+    mydrive_path_dir = f'{DRIVE_BASE_DIR}/MyDrive'
+    data_path_dir = f'{mydrive_path_dir}/{DATA_DIR}'
+    train_path_zip = f'{mydrive_path_dir}/{TRAIN_ZIP}'
+    val_path_zip = f'{mydrive_path_dir}/{VAL_ZIP}'
+    test_path_zip = f'{mydrive_path_dir}/{TEST_ZIP}'
+    train_path_dir = f'{mydrive_path_dir}/{TRAIN_DIR}'
+    val_path_dir = f'{mydrive_path_dir}/{VAL_DIR}'
+    test_path_dir = f'{mydrive_path_dir}/{TEST_DIR}'
 
     drive.mount(DRIVE_BASE_DIR)
 
@@ -39,9 +40,7 @@ def download_to_gdrive():
         wget.download('https://zenodo.org/record/5706578/files/Test.zip?download=1', test_path_zip)
 
 def extract_from_gdrive():
-
-    drive_path_dir = '/content/drive'
-    mydrive_path_dir = f'{drive_path_dir}/MyDrive'
+    mydrive_path_dir = f'{DRIVE_BASE_DIR}/MyDrive'
     data_path_dir = f'{mydrive_path_dir}/{DATA_DIR}'
     train_path_zip = f'{mydrive_path_dir}/{TRAIN_ZIP}'
     val_path_zip = f'{mydrive_path_dir}/{VAL_ZIP}'
@@ -50,7 +49,7 @@ def extract_from_gdrive():
     val_path_dir = f'{mydrive_path_dir}/{VAL_DIR}'
     test_path_dir = f'{mydrive_path_dir}/{TEST_DIR}'
 
-    drive.mount(drive_path_dir)
+    drive.mount(mydrive_path_dir)
 
     train_dir = Path(TRAIN_DIR)
     if not train_dir.exists():
@@ -72,14 +71,13 @@ def extract_from_gdrive():
     
 
 def copy_to_gdrive():
-    drive_path_dir = '/content/drive'
-    mydrive_path_dir = f'{drive_path_dir}/MyDrive'
+    mydrive_path_dir = f'{DRIVE_BASE_DIR}/MyDrive'
     data_path_dir = f'{mydrive_path_dir}/{DATA_DIR}'
     train_path_zip = f'{mydrive_path_dir}/{TRAIN_ZIP}'
     val_path_zip = f'{mydrive_path_dir}/{VAL_ZIP}'
     test_path_zip = f'{mydrive_path_dir}/{TEST_ZIP}'
 
-    drive.mount(drive_path_dir)
+    drive.mount(DRIVE_BASE_DIR)
 
     # Create the directory if it doesn't exist
     os.makedirs(data_path_dir, exist_ok=True)
