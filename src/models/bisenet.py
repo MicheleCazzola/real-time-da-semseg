@@ -1,3 +1,8 @@
+"""
+BiSeNet model definition
+From the original implementation: github.com/CoinCheung/BiSeNet
+"""
+
 import torch
 from torchvision import models
 

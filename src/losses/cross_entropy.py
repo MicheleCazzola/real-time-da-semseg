@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-
+# CE loss used in PIDNet
 class CrossEntropy(nn.Module):
     def __init__(self, ignore_label=-1, weight=None):
         super(CrossEntropy, self).__init__()

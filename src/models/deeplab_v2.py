@@ -1,3 +1,7 @@
+"""
+Deeplab v2 model definition
+"""
+
 import torch
 import torch.nn as nn
 

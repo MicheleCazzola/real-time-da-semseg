@@ -1,6 +1,14 @@
+"""
+PIDNet model definition
+From the original implementation: github.com/XuJiacong/PIDNet
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from src.losses.pidnet import pidnet_loss
+from src.utils.variables import IGNORE_INDEX
 
 BatchNorm2d = nn.BatchNorm2d
 bn_mom = 0.1
@@ -548,31 +556,43 @@ class PIDNet(nn.Module):
             return x_
         
 
-class CrossEntropy(nn.Module):
-    def __init__(self, ignore_label=-1, weight=None):
-        super(CrossEntropy, self).__init__()
-        self.ignore_label = ignore_label
-        self.criterion = nn.CrossEntropyLoss(
-            weight=weight,
-            ignore_index=ignore_label
-        )
+class FullPIDNetModel(nn.Module):
 
-    def _forward(self, score, target):
+    def __init__(self, model, sem_loss, bd_loss):
+        super(FullPIDNetModel, self).__init__()
+        self.model = model
+        self.sem_loss = sem_loss
+        self.bd_loss = bd_loss
 
-        loss = self.criterion(score, target)
+    def pixel_acc(self, pred, label):
+        _, preds = torch.max(pred, dim=1)
+        valid = (label != IGNORE_INDEX).long()
+        acc_sum = torch.sum(valid * (preds == label).long())
+        pixel_sum = torch.sum(valid)
+        acc = acc_sum.float() / (pixel_sum.float() + 1e-10)
+        return acc
 
-        return loss
+    def forward(self, inputs, labels, bd_gt, *args, **kwargs):
+        outputs = self.model(inputs, *args, **kwargs)
 
-    def forward(self, score, target):
-
-        # From original configs
-        balance_weights = [0.4, 1.0]
-        sb_weights = 1.0
-
-        if len(balance_weights) == len(score):
-            return sum([w * self._forward(x, target) for (w, x) in zip(balance_weights, score)])
-        elif len(score) == 1:
-            return sb_weights * self._forward(score[0], target)
-
+        if labels is None:
+          h, w = inputs.size(2), inputs.size(3)
         else:
-            raise ValueError("lengths of prediction and target are not identical!")
+          h, w = labels.size(1), labels.size(2)
+
+        ph, pw = outputs[0].size(2), outputs[0].size(3)
+        if ph != h or pw != w:
+            for i in range(len(outputs)):
+                outputs[i] = F.interpolate(outputs[i], size=(
+                    h, w), mode='bilinear', align_corners=True)     #from original configs
+
+        if bd_gt is None:
+            return None, outputs, None, None
+
+        acc  = self.pixel_acc(outputs[-2], labels)
+        
+        loss_s, loss_b, loss_sb = pidnet_loss(outputs, labels, self.sem_loss, self.bd_loss, bd_gt)
+
+        loss = loss_s + loss_b + loss_sb
+
+        return torch.unsqueeze(loss, 0), outputs, acc, [loss_s, loss_b, loss_sb]

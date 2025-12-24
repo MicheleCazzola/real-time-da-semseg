@@ -1,3 +1,8 @@
+"""
+STDC model definition
+From the original implementation: github.com/MichaelFan01/STDC-Seg
+"""
+
 import torch
 import torch.nn as nn
 from torch.nn import init
