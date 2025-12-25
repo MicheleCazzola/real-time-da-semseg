@@ -14,7 +14,7 @@ def pidnet_loss(outputs, labels, sem_loss, bd_loss, bd_gt=None):
         for i, m in enumerate(labels):
             bd_gt[i] = generate_bd(m.cpu().numpy().astype(np.uint8))
 
-    bd_gt = torch.from_numpy(bd_gt).to(device)
+        bd_gt = torch.from_numpy(bd_gt).to(device)
 
     loss_b = bd_loss(outputs[-1], bd_gt)
 
