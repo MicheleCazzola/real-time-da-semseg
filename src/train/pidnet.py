@@ -18,7 +18,7 @@ def get_pidnet(model_name, num_classes, pretrained_weights, imgnet_pretrained) -
         model = PIDNet(m=3, n=4, num_classes=num_classes, planes=64, ppm_planes=112, head_planes=256, augment=True)
 
     if imgnet_pretrained:
-        pretrained_state = torch.load(pretrained_weights, map_location='cpu')['state_dict']
+        pretrained_state = torch.load(pretrained_weights, map_location='cpu')
         model_dict = model.state_dict()
         pretrained_state = {k: v for k, v in pretrained_state.items() if (k in model_dict and v.shape == model_dict[k].shape)}
         model_dict.update(pretrained_state)
@@ -29,8 +29,6 @@ def get_pidnet(model_name, num_classes, pretrained_weights, imgnet_pretrained) -
         model.load_state_dict(model_dict, strict = False)
     else:
         pretrained_dict = torch.load(pretrained_weights, map_location='cpu')
-        if 'state_dict' in pretrained_dict:
-            pretrained_dict = pretrained_dict['state_dict']
         model_dict = model.state_dict()
         pretrained_dict = {k[6:]: v for k, v in pretrained_dict.items() if (k[6:] in model_dict and v.shape == model_dict[k[6:]].shape)}
         msg = 'Loaded {} parameters!'.format(len(pretrained_dict))
