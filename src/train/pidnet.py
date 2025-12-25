@@ -73,10 +73,13 @@ def pidnet_model_setup(pidnet_model, pretrained, learning_rate, weight_decay, st
 
 
 @torch.no_grad()
-def evaluate_pidnet(model, dataloader, device) -> tuple:
+def evaluate_pidnet(model, dataloader, device, log_frequency) -> tuple:
 
     model.eval()
+    
+    print("=== Evaluation ===")
 
+    step = 0
     running_loss = 0.0
     data_len = 0
     iou_scores = 0.0
@@ -91,13 +94,19 @@ def evaluate_pidnet(model, dataloader, device) -> tuple:
         boundaries = boundaries.to(device)
 
         # Forward pass
-        loss, outputs, _, _ = model(inputs, masks, boundaries)
+        loss, outputs, _, [loss_s, loss_b, loss_sb] = model(inputs, masks, boundaries)
         running_loss += loss.item() * inputs.size(0)
 
         # Calculate mIoU
         iou, iou_per_class = calculate_iou(outputs[1], masks, num_classes)
         iou_scores += iou.item() * inputs.size(0)
         ious_per_class += iou_per_class.cpu() * inputs.size(0)
+        
+        if (step + 1) % log_frequency == 0:
+            print(f"Iteration {step+1}, Loss: {running_loss / data_len:.3f}, mIoU: {100 * iou_scores / data_len:.2f}%"
+                  f"\tLoss_s: {loss_s.item():.3f}, Loss_b: {loss_b.item():.3f}, Loss_sb: {loss_sb.item():.3f}")
+        
+        step += 1
 
     mIoU = 100 * iou_scores / data_len
     loss = running_loss / data_len
@@ -114,6 +123,7 @@ def train_pidnet(model, trainloader, validloader, optimizer, scheduler, num_epoc
 
     for epoch in range(num_epochs):
 
+        data_len = 0
         current_step = 0
         train_loss = 0.0
         model.train()
@@ -123,27 +133,29 @@ def train_pidnet(model, trainloader, validloader, optimizer, scheduler, num_epoc
             inputs = inputs.to(device)
             masks = masks.to(device)
             boundaries = boundaries.to(device)
+            data_len += inputs.size(0)
 
             # Forward pass
             optimizer.zero_grad()
             loss, _, _, [loss_s, loss_b, loss_sb] = model(inputs, masks, boundaries)
-            train_loss += loss.item()
+            train_loss += loss.item() * inputs.size(0)
 
             # Backward pass
             loss.backward()
             optimizer.step()
 
             if current_step % log_frequency == 0:
-                print(f"Epoch {epoch+1}, Iteration {current_step}, Loss: {loss.item():.3f} Loss_s: {loss_s.item():.3f} Loss_b: {loss_b.item():.3f} Loss_sb: {loss_sb.item():.3f}")
+                print(f"Epoch {epoch+1}, Iteration {current_step}, Current Loss: {train_loss/data_len:.3f} "
+                      f"\tLoss_s: {loss_s.item():.3f}, Loss_b: {loss_b.item():.3f}, Loss_sb: {loss_sb.item():.3f}")
 
             current_step += 1
 
-        train_loss /= len(trainloader)
+        train_loss /= data_len
 
         print(f"End of Epoch {epoch+1}")
         print(f"Training loss: {train_loss:.5f}")
 
-        val_loss, val_miou, mious_per_class = evaluate_pidnet(model, validloader, device)
+        val_loss, val_miou, mious_per_class = evaluate_pidnet(model, validloader, device, log_frequency)
 
         print(f"Validation mIoU: {val_miou:.2f}%, Validation loss: {val_loss:.5f}")
 
