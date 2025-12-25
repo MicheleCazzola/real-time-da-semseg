@@ -49,7 +49,7 @@ def extract_from_gdrive():
     val_path_dir = f'{mydrive_path_dir}/{VAL_DIR}'
     test_path_dir = f'{mydrive_path_dir}/{TEST_DIR}'
 
-    drive.mount(mydrive_path_dir)
+    drive.mount(DRIVE_BASE_DIR)
 
     train_dir = Path(TRAIN_DIR)
     if not train_dir.exists():
