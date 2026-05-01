@@ -1,7 +1,7 @@
 """
 Deeplab v2 model definition
 """
-
+import logging
 import torch
 import torch.nn as nn
 
@@ -134,9 +134,6 @@ class ResNetMulti(nn.Module):
 
         x = torch.nn.functional.interpolate(x, size=(H, W), mode='bilinear')
 
-        if self.training == True:
-            return x, None, None
-
         return x
 
     def get_1x_lr_params_no_scale(self):
@@ -187,7 +184,7 @@ def get_deeplab_v2(num_classes=19, pretrain=True, pretrain_model_path='DeepLab_r
 
     # Pretraining loading
     if pretrain:
-        print('Deeplab pretraining loading...')
+        logging.info('Deeplab pretraining loading...')
         saved_state_dict = torch.load(pretrain_model_path, weights_only=True)
 
         new_params = model.state_dict().copy()

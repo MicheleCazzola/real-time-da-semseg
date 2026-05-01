@@ -10,12 +10,6 @@ class CrossEntropy(nn.Module):
             ignore_index=ignore_label
         )
 
-    def _forward(self, score, target):
-
-        loss = self.criterion(score, target)
-
-        return loss
-
     def forward(self, score, target):
 
         # From original configs
@@ -23,9 +17,9 @@ class CrossEntropy(nn.Module):
         sb_weights = 1.0
 
         if len(balance_weights) == len(score):
-            return sum([w * self._forward(x, target) for (w, x) in zip(balance_weights, score)])
+            return sum([w * self.criterion(x, target) for (w, x) in zip(balance_weights, score)])
         elif len(score) == 1:
-            return sb_weights * self._forward(score[0], target)
+            return sb_weights * self.criterion(score[0], target)
 
         else:
-            raise ValueError("lengths of prediction and target are not identical!")
+            raise ValueError("Lengths of prediction and target are not identical")

@@ -1,3 +1,4 @@
+import logging
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
@@ -7,7 +8,6 @@ from src.models.bisenet import BiSeNet
 from src.models.discriminator import FCDiscriminator
 from src.models.pidnet import PIDNet
 from src.models.stdc import STDC
-from src.utils.variables import device, num_classes
 from src.train.utils import train_forward_source, train_forward_target, evaluate_model
 from src.utils.utils import get_mious_per_category
 
@@ -103,29 +103,29 @@ def train_adda(
             optimizer_domain.step()
 
             if current_step % log_frequency == 0:
-                print(f"Epoch {epoch+1}, Iteration {current_step}, Source loss: {running_source_loss_seg/(current_step+1):5f}, Domain loss: {loss_G/(current_step+1):.5f} ({loss_D/(current_step+1):.5f}")
+                logging.info(f"Epoch {epoch+1}, Iteration {current_step}, Source loss: {running_source_loss_seg/(current_step+1):5f}, Domain loss: {loss_G/(current_step+1):.5f} ({loss_D/(current_step+1):.5f}")
             current_step += 1
 
         train_loss = running_source_loss_seg/len(trainloader)
         train_domain_loss_G = loss_G/len(trainloader)
         train_domain_loss_D = loss_D/len(trainloader)
 
-        print(f"End of Epoch {epoch+1}")
-        print(f"Training loss: {train_loss:.5f}")
-        print(f"Domain loss G: {train_domain_loss_G:.5f}")
-        print(f"Domain loss D: {train_domain_loss_D:.5f}")
+        logging.info(f"End of Epoch {epoch+1}")
+        logging.info(f"Training loss: {train_loss:.5f}")
+        logging.info(f"Domain loss G: {train_domain_loss_G:.5f}")
+        logging.info(f"Domain loss D: {train_domain_loss_D:.5f}")
 
         val_loss, val_miou, val_mious_per_class = evaluate_model(model, validloader, device, criterion)
         mious_per_category = get_mious_per_category(val_mious_per_class)
         
-        print(f"Validation mIoU: {val_miou:.3f}%, Validation loss: {val_loss:.5f}")
+        logging.info(f"Validation mIoU: {val_miou:.3f}%, Validation loss: {val_loss:.5f}")
 
         val_losses.append(val_loss)
         train_losses.append(train_loss)
         miou_scores.append(val_miou)
         miou_scores_per_category.append(mious_per_category)
         
-        print()
+        logging.info(f"Epoch {epoch+1} completed. Training loss: {train_loss:.5f}, Validation loss: {val_loss:.5f}, Validation mIoU: {val_miou:.3f}%")
         
         if scheduler is not None:
             scheduler.step()

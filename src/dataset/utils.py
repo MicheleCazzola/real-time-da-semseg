@@ -1,4 +1,5 @@
 import os
+import logging
 from pathlib import Path
 import shutil
 import numpy as np
@@ -6,7 +7,7 @@ import torch
 from torch.utils.data import DataLoader
 import wget
 import zipfile
-from google.colab import drive
+#from google.colab import drive
 
 from src.dataset.dataset import LoveDA
 from src.utils.variables import categories, device, DRIVE_BASE_DIR, DATA_DIR, IMG_PATH, MASK_PATH, RURAL_PATH, TRAIN_DIR, URBAN_PATH, VAL_DIR, TEST_DIR, TRAIN_ZIP, VAL_ZIP, TEST_ZIP
@@ -85,15 +86,15 @@ def copy_to_gdrive():
     # Copy the zip files using shutil.copy
     if not os.path.exists(train_path_zip):
         shutil.copy(TRAIN_ZIP, train_path_zip)
-        print(f"Copied {TRAIN_ZIP} to {train_path_zip}")
+        logging.info(f"Copied {TRAIN_ZIP} to {train_path_zip}")
 
     if not os.path.exists(val_path_zip):
         shutil.copy(VAL_ZIP, val_path_zip)
-        print(f"Copied {VAL_ZIP} to {val_path_zip}")
+        logging.info(f"Copied {VAL_ZIP} to {val_path_zip}")
 
     if not os.path.exists(test_path_zip):
         shutil.copy(TEST_ZIP, test_path_zip)
-        print(f"Copied {TEST_ZIP} to {test_path_zip}")
+        logging.info(f"Copied {TEST_ZIP} to {test_path_zip}")
         
 
 def compute_class_distribution(seed_worker, g):

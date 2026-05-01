@@ -2,7 +2,7 @@
 Domain Adaptation via Cross-domain Mixed Sampling (DACS)
 From the original implementation: github.com/vikolss/DACS
 """
-
+import logging
 import copy
 import numpy as np
 import torch
@@ -16,7 +16,6 @@ from src.models.pidnet import FullPIDNetModel, PIDNet
 from src.losses.bondary import BondaryLoss
 from src.losses.cross_entropy import CrossEntropy
 from src.train.pidnet import evaluate_pidnet, get_pidnet
-from src.utils.variables import num_classes, PIDNET_S_WEIGHTS, IGNORE_INDEX, device, categories
 from src.utils.utils import get_mious_per_category
 from src.train.utils import evaluate_model, train_forward_source, train_forward_target
 
@@ -206,7 +205,7 @@ def train_dacs(
             optimizer.step()
 
             if n % log_frequency == 0:
-                print('\tProcessed {0:d} batches, loss_l = {1:.3f}, loss_u = {2:.3f} loss = {3:.3f}'.format(n, loss_l_value/(n+1), loss_u_value/(n+1),(loss_l_value+loss_u_value)/(n+1)))
+                logging.info('\tProcessed {0:d} batches, loss_l = {1:.3f}, loss_u = {2:.3f} loss = {3:.3f}'.format(n, loss_l_value/(n+1), loss_u_value/(n+1),(loss_l_value+loss_u_value)/(n+1)))
 
             n += 1
 
@@ -225,17 +224,16 @@ def train_dacs(
         alpha_teacher = 0.99
         ema_model = update_ema_variables(ema_model = ema_model, model = model, alpha_teacher=alpha_teacher, iteration=epoch)
 
-        print('iter = {0:6d}/{1:6d}, loss_l = {2:.3f}, loss_u = {3:.3f} loss = {4:.3f}'.format(epoch+1, num_epochs, loss_l_value, loss_u_value, loss_l_value + loss_u_value))
+        logging.info('iter = {0:6d}/{1:6d}, loss_l = {2:.3f}, loss_u = {3:.3f} loss = {4:.3f}'.format(epoch+1, num_epochs, loss_l_value, loss_u_value, loss_l_value + loss_u_value))
 
         val_loss, val_mean_iou, mious_per_class = evaluate_model(model, validloader, device, criterion)
         
         mious_per_category = get_mious_per_category(mious_per_class)
         
-        print(f"Validation mIoU: {val_mean_iou*100:.3f}%, Validation loss: {val_loss:.5f}")
+        logging.info(f"Validation mIoU: {val_mean_iou*100:.3f}%, Validation loss: {val_loss:.5f}")
         
         for i, cat in enumerate(categories.keys()):
-            print(f"{cat} mIoU: {mious_per_class[i]:.2f}")
-        print()
+            logging.info(f"{cat} mIoU: {mious_per_class[i]:.2f}")
 
         val_losses.append(val_loss)
         miou_scores.append(val_mean_iou)

@@ -2,10 +2,11 @@
 STDC model definition
 From the original implementation: github.com/MichaelFan01/STDC-Seg
 """
-
+import logging
 import torch
 import torch.nn as nn
 from torch.nn import init
+import torch.nn.functional as F
 import math
 
 class ConvX(nn.Module):
@@ -23,7 +24,7 @@ class ConvX(nn.Module):
 class AddBottleneck(nn.Module):
     def __init__(self, in_planes, out_planes, block_num=3, stride=1):
         super(AddBottleneck, self).__init__()
-        assert block_num > 1, print("block number should be larger than 1.")
+        assert block_num > 1, logging.info("block number should be larger than 1.")
         self.conv_list = nn.ModuleList()
         self.stride = stride
         if stride == 2:
@@ -72,7 +73,7 @@ class AddBottleneck(nn.Module):
 class CatBottleneck(nn.Module):
     def __init__(self, in_planes, out_planes, block_num=3, stride=1):
         super(CatBottleneck, self).__init__()
-        assert block_num > 1, print("block number should be larger than 1.")
+        assert block_num > 1, logging.info("block number should be larger than 1.")
         self.conv_list = nn.ModuleList()
         self.stride = stride
         if stride == 2:
@@ -141,7 +142,7 @@ class STDCNet1446(nn.Module):
         self.x32 = nn.Sequential(self.features[11:])
 
         if pretrain_model:
-            print('use pretrain model {}'.format(pretrain_model))
+            logging.info('use pretrain model {}'.format(pretrain_model))
             self.init_weight(pretrain_model)
         else:
             self.init_params()
@@ -232,14 +233,14 @@ class STDCNet813(nn.Module):
         self.x32 = nn.Sequential(self.features[6:])
 
         if pretrain_model:
-            print('use pretrain model {}'.format(pretrain_model))
+            logging.info('use pretrain model {}'.format(pretrain_model))
             self.init_weight(pretrain_model)
         else:
             self.init_params()
 
     def init_weight(self, pretrain_model):
 
-        state_dict = torch.load(pretrain_model)["state_dict"]
+        state_dict = torch.load(pretrain_model)
         self_state_dict = self.state_dict()
         for k, v in state_dict.items():
             self_state_dict.update({k: v})
@@ -298,13 +299,6 @@ class STDCNet813(nn.Module):
         out = self.linear(out)
         return out
 
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-BatchNorm2d = nn.BatchNorm2d
-
 class ConvBNReLU(nn.Module):
     def __init__(self, in_chan, out_chan, ks=3, stride=1, padding=1, *args, **kwargs):
         super(ConvBNReLU, self).__init__()
@@ -314,8 +308,8 @@ class ConvBNReLU(nn.Module):
                 stride = stride,
                 padding = padding,
                 bias = False)
-        self.bn = BatchNorm2d(out_chan)
-        #self.bn = BatchNorm2d(out_chan, activation='none')
+        self.bn = nn.BatchNorm2d(out_chan)
+        #self.bn = nn.BatchNorm2d(out_chan, activation='none')
         self.relu = nn.ReLU()
         self.init_weight()
 
@@ -357,7 +351,7 @@ class BiSeNetOutput(nn.Module):
                 wd_params.append(module.weight)
                 if not module.bias is None:
                     nowd_params.append(module.bias)
-            elif isinstance(module, BatchNorm2d):
+            elif isinstance(module, nn.BatchNorm2d):
                 nowd_params += list(module.parameters())
         return wd_params, nowd_params
 
@@ -367,8 +361,8 @@ class AttentionRefinementModule(nn.Module):
         super(AttentionRefinementModule, self).__init__()
         self.conv = ConvBNReLU(in_chan, out_chan, ks=3, stride=1, padding=1)
         self.conv_atten = nn.Conv2d(out_chan, out_chan, kernel_size= 1, bias=False)
-        self.bn_atten = BatchNorm2d(out_chan)
-        #self.bn_atten = BatchNorm2d(out_chan, activation='none')
+        self.bn_atten = nn.BatchNorm2d(out_chan)
+        #self.bn_atten = nn.BatchNorm2d(out_chan, activation='none')
 
         self.sigmoid_atten = nn.Sigmoid()
         self.init_weight()
@@ -416,7 +410,7 @@ class ContextPath(nn.Module):
             self.conv_head16 = ConvBNReLU(128, 128, ks=3, stride=1, padding=1)
             self.conv_avg = ConvBNReLU(inplanes, 128, ks=1, stride=1, padding=0)
         else:
-            print("backbone is not in backbone lists")
+            logging.info("backbone is not in backbone lists")
             exit(0)
 
         self.init_weight()
@@ -459,7 +453,7 @@ class ContextPath(nn.Module):
                 wd_params.append(module.weight)
                 if not module.bias is None:
                     nowd_params.append(module.bias)
-            elif isinstance(module, BatchNorm2d):
+            elif isinstance(module, nn.BatchNorm2d):
                 nowd_params += list(module.parameters())
         return wd_params, nowd_params
 
@@ -509,7 +503,7 @@ class FeatureFusionModule(nn.Module):
                 wd_params.append(module.weight)
                 if not module.bias is None:
                     nowd_params.append(module.bias)
-            elif isinstance(module, BatchNorm2d):
+            elif isinstance(module, nn.BatchNorm2d):
                 nowd_params += list(module.parameters())
         return wd_params, nowd_params
 
@@ -524,8 +518,6 @@ class STDC(nn.Module):
         self.use_boundary_16 = use_boundary_16
         # self.heat_map = heat_map
         self.cp = ContextPath(backbone, pretrain_model, use_conv_last=use_conv_last)
-
-
 
         if backbone == 'STDCNet1446':
             conv_out_inplanes = 128
@@ -544,7 +536,7 @@ class STDC(nn.Module):
             inplane = sp8_inplanes + conv_out_inplanes
 
         else:
-            print("backbone is not in backbone lists")
+            logging.info("backbone is not in backbone lists")
             exit(0)
 
         self.ffm = FeatureFusionModule(inplane, 256)
@@ -575,13 +567,16 @@ class STDC(nn.Module):
         feat_fuse = self.ffm(feat_res8, feat_cp8)
 
         feat_out = self.conv_out(feat_fuse)
+        feat_out = F.interpolate(feat_out, (H, W), mode='bilinear', align_corners=True)
+        
+        # Added to avoid having multiple outputs at inference time
+        if not self.training:
+            return feat_out
+        
         feat_out16 = self.conv_out16(feat_cp8)
         feat_out32 = self.conv_out32(feat_cp16)
-
-        feat_out = F.interpolate(feat_out, (H, W), mode='bilinear', align_corners=True)
         feat_out16 = F.interpolate(feat_out16, (H, W), mode='bilinear', align_corners=True)
         feat_out32 = F.interpolate(feat_out32, (H, W), mode='bilinear', align_corners=True)
-
 
         if self.use_boundary_2 and self.use_boundary_4 and self.use_boundary_8:
             return feat_out, feat_out16, feat_out32, feat_out_sp2, feat_out_sp4, feat_out_sp8

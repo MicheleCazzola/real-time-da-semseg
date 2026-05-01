@@ -1,3 +1,4 @@
+import os
 from torch.utils.data import DataLoader
 import albumentations as A
 
@@ -11,26 +12,30 @@ from src.train.pidnet import evaluate_pidnet
 from src.train.stdc import evaluate_stdc
 
 
-def trainset_setup(avg, std, resize, dir_path, num_workers, batch_size, g, seed_worker, augmentations=A.NoOp(p=1)):
+def trainset_setup(cfg, domain, g, seed_worker, num_workers, augmentations=A.NoOp(p=1), boundaries=False, reduce_factor=1):
     train_transform = A.Compose([
-        A.Normalize(mean=avg, std=std, p=1, always_apply=True, max_pixel_value=255),
+        A.Normalize(mean=cfg.data.imagenet_mean, std=cfg.data.imagenet_std, p=1, always_apply=True, max_pixel_value=255),
         augmentations,
-        A.Resize(resize, resize, p=1, always_apply=True)
+        A.Resize(cfg.data.resize["height"], cfg.data.resize["width"], p=1, always_apply=True),
+        A.ToTensorV2(transpose_mask=True)
     ])
-    train_dataset = LoveDA(TRAIN_DIR, IMG_PATH, MASK_PATH, directories=dir_path, transforms=train_transform, bd=True)
+    train_root = os.path.join(cfg.path.root, cfg.path.train_dir)
+    train_dataset = LoveDA(train_root, cfg.path.images, cfg.path.masks, directories=domain, transforms=train_transform, bd=boundaries, reduce_factor=reduce_factor)
     train_loader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=num_workers, worker_init_fn=seed_worker, generator=g
+        train_dataset, batch_size=cfg.data.batch_size, shuffle=True, drop_last=True, num_workers=num_workers, worker_init_fn=seed_worker, generator=g
     )
     
     return train_dataset, train_loader
 
-def validset_setup(avg, std, dir_path, num_workers, batch_size, g, seed_worker):
+def validset_setup(cfg, domain, num_workers, g, seed_worker, boundaries=False, reduce_factor=1):
     val_transform = A.Compose([
-        A.Normalize(mean=avg, std=std, p=1, always_apply=True, max_pixel_value=255)
+        A.Normalize(mean=cfg.data.imagenet_mean, std=cfg.data.imagenet_std, p=1, always_apply=True, max_pixel_value=255),
+        A.ToTensorV2(transpose_mask=True)
     ])
-    val_dataset = LoveDA(VAL_DIR, IMG_PATH, MASK_PATH, directories=dir_path, transforms=val_transform, bd=True)
+    val_root = os.path.join(cfg.path.root, cfg.path.val_dir)
+    val_dataset = LoveDA(val_root, cfg.path.images, cfg.path.masks, directories=domain, transforms=val_transform, bd=boundaries, reduce_factor=reduce_factor)
     val_loader = DataLoader(
-        val_dataset, batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers, worker_init_fn=seed_worker, generator=g
+        val_dataset, batch_size=cfg.data.batch_size, shuffle=False, drop_last=False, num_workers=num_workers, worker_init_fn=seed_worker, generator=g
     )
     
     return val_dataset, val_loader

@@ -2,10 +2,13 @@
 BiSeNet model definition
 From the original implementation: github.com/CoinCheung/BiSeNet
 """
-
+import logging
 import torch
 from torchvision import models
-
+import torch
+from torch import nn
+import warnings
+warnings.filterwarnings(action='ignore')
 
 class resnet18(torch.nn.Module):
     def __init__(self, pretrained=True):
@@ -67,11 +70,6 @@ def build_contextpath(name):
         'resnet101': resnet101(pretrained=True)
     }
     return model[name]
-
-import torch
-from torch import nn
-import warnings
-warnings.filterwarnings(action='ignore')
 
 
 class ConvBlock(torch.nn.Module):
@@ -154,7 +152,7 @@ class BiSeNet(torch.nn.Module):
     def __init__(self, num_classes, context_path):
         super().__init__()
         # build spatial path
-        self.saptial_path = Spatial_path()
+        self.spatial_path = Spatial_path()
 
         # build context path
         self.context_path = build_contextpath(name=context_path)
@@ -179,7 +177,7 @@ class BiSeNet(torch.nn.Module):
             # build feature fusion module
             self.feature_fusion_module = FeatureFusionModule(num_classes, 1024)
         else:
-            print('Error: unspport context_path network \n')
+            logging.info('Error: unspport context_path network \n')
 
         # build final convolution
         self.conv = nn.Conv2d(in_channels=num_classes, out_channels=num_classes, kernel_size=1)
@@ -187,7 +185,7 @@ class BiSeNet(torch.nn.Module):
         self.init_weight()
 
         self.mul_lr = []
-        self.mul_lr.append(self.saptial_path)
+        self.mul_lr.append(self.spatial_path)
         self.mul_lr.append(self.attention_refinement_module1)
         self.mul_lr.append(self.attention_refinement_module2)
         self.mul_lr.append(self.supervision1)
@@ -208,13 +206,14 @@ class BiSeNet(torch.nn.Module):
 
     def forward(self, input):
         # output of spatial path
-        sx = self.saptial_path(input)
+        sx = self.spatial_path(input)
 
         # output of context path
         cx1, cx2, tail = self.context_path(input)
         cx1 = self.attention_refinement_module1(cx1)
         cx2 = self.attention_refinement_module2(cx2)
         cx2 = torch.mul(cx2, tail)
+        
         # upsampling
         cx1 = torch.nn.functional.interpolate(cx1, size=sx.size()[-2:], mode='bilinear')
         cx2 = torch.nn.functional.interpolate(cx2, size=sx.size()[-2:], mode='bilinear')

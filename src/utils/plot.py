@@ -1,46 +1,111 @@
+import logging
+import os
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 
 from src.utils.variables import categories
 
-### Plot losses and mious
-def plot_losses_mious(train_losses, eval_losses, miou_scores, num_epochs):
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 5))
-
-    ax1.plot(train_losses, label='Training Loss')
-    ax1.plot(eval_losses, label='Validation Loss')
-    ax1.set_xlabel('Epochs')
-    ax1.set_ylabel('Loss')
-    ax1.set_xticks(range(0, num_epochs), range(1, num_epochs + 1))
-    ax1.set_title('Training and Validation Loss')
-    ax1.legend()
-    ax1.grid()
-
-    ax2.plot(miou_scores, label='mIoU')
-    ax2.set_xlabel('Epochs')
-    ax2.set_ylabel('mIoU')
-    ax2.set_xticks(range(0, num_epochs), range(1, num_epochs + 1))
-    ax2.set_title('mIoU')
-    ax2.legend()
-    ax2.grid()
-
-    plt.show()
+def plot_losses(*losses, labels, title, y_label, best_epoch=None, num_ticks=5, save_to=None, show=False):
     
-    
-def plot_mious_per_category(miou_scores, num_epochs):
     plt.figure(figsize=(10, 6))
-    for class_name, miou_values in miou_scores.items():
-        plt.plot(range(num_epochs), miou_values, label=class_name)
-
-    plt.xlabel('Epoch')
-    plt.ylabel('mIoU (%)')
-    plt.xticks(range(0, num_epochs), range(1, num_epochs + 1))
-    plt.title('mIoU per Class over Epochs')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+    for loss, label in zip(losses, labels):
+        plt.plot(loss, label=label)
     
+    if best_epoch is not None:
+        plt.axvline(x=best_epoch-1, color="red", linestyle="--", label=f"Best Epoch: {best_epoch}")
+    
+    plt.xlabel("Epoch")
+    
+    period = max(1, len(losses[0]) // num_ticks)
+    plt.xticks(
+        ticks=[0] + list(np.arange(period-1, len(losses[0]), period)),
+        labels=[1] + list(np.arange(period, len(losses[0]) + 1, period))
+    )
+    plt.ylabel(y_label)
+    plt.title(title)
+    plt.legend()
+    plt.grid(alpha=0.3)
+    
+    if save_to is not None:
+        plt.savefig(save_to, bbox_inches='tight', dpi=200)
+    
+    if show:
+        plt.show()
+    else:
+        plt.close()
+    
+def plot_results(dir_path, id2label, main_losses, mean_ious, ious_per_class, train_losses=None, show=False):
+
+    train_ious = list(np.array(ious_per_class["train_ious"]).T)
+    val_ious = list(np.array(ious_per_class["val_ious"]).T)
+    
+    best_epoch = np.argmax(mean_ious["val_mious"]) + 1
+    
+    # Training/Validation Losses
+    plot_losses(
+        main_losses["train_losses"],
+        main_losses["val_losses"],
+        labels=["Training", "Validation"],
+        title="Loss",
+        y_label="Loss",
+        best_epoch=best_epoch,
+        num_ticks=5,
+        save_to=os.path.join(dir_path, "losses.png"),
+        show=show
+    )
+    
+    # Training specific losses
+    if train_losses is not None:
+        for name, group in train_losses.items():
+            plot_losses(
+                *group.values(),
+                labels=[label.replace("train_losses_", "").replace("_", " ") for label in group.keys()],
+                title=f"Training Losses: {name.title()}",
+                y_label="Loss",
+                best_epoch=best_epoch,
+                num_ticks=5,
+                save_to=os.path.join(dir_path, f"train_losses_{name}.png"),
+                show=show
+            )
+    
+    # mIoU
+    plot_losses(
+        mean_ious["train_mious"],
+        mean_ious["val_mious"],
+        labels=["Training", "Validation"],
+        title="Mean Intersection over Union (mIoU)",
+        y_label="mIoU (%)",
+        best_epoch=best_epoch,
+        num_ticks=5,
+        save_to=os.path.join(dir_path, "mious.png"),
+        show=show
+    )
+    
+    # IoU per class (train)
+    plot_losses(
+        *train_ious,
+        labels=[label for label in id2label] + [f"{label} (Val)" for label in id2label],
+        title="Training Intersection over Union (IoU) per Class",
+        y_label="IoU (%)",
+        best_epoch=best_epoch,
+        num_ticks=5,
+        save_to=os.path.join(dir_path, "train_ious_per_class.png"),
+        show=show
+    )
+    
+    # IoU per class (val)
+    plot_losses(
+        *val_ious,
+        labels=[label for label in id2label],
+        title="Validation Intersection over Union (IoU) per Class",
+        y_label="IoU (%)",
+        best_epoch=best_epoch,
+        num_ticks=5,
+        save_to=os.path.join(dir_path, "val_ious_per_class.png"),
+        show=show
+    )
+
 ### Image visualization
 def plot_tensor_mask(mask_tensor, categories):
 
@@ -77,7 +142,7 @@ def plot_class_distribution(urban_classes, rural_classes):
     plt.tight_layout()
     plt.show()
 
-    print("urban_percentage = ", [float(autotext.get_text().strip('%')) for autotext in autotexts])
+    logging.info("urban_percentage = ", [float(autotext.get_text().strip('%')) for autotext in autotexts])
 
     wedges, texts, autotexts= plt.pie([v.cpu().numpy() for v in rural_classes.values()], labels=rural_classes.keys(), colors=colors, autopct='%1.1f%%', pctdistance=0.85, labeldistance=1.1, startangle=90)
     for text in texts:
@@ -88,4 +153,4 @@ def plot_class_distribution(urban_classes, rural_classes):
     plt.tight_layout()
     plt.show()
 
-    print("rural_percentage = ", [float(autotext.get_text().strip('%')) for autotext in autotexts])
+    logging.info("rural_percentage = ", [float(autotext.get_text().strip('%')) for autotext in autotexts])

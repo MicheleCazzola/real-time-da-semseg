@@ -1,11 +1,15 @@
 import torch
+from torch.optim import lr_scheduler
+import os
+import logging
 
-from src.metrics.metrics import calculate_iou
+from src.losses.focal import FocalLoss
+from src.losses.ohem import OhemCrossEntropy
+from src.metrics.metrics import compute_iou
 from src.losses.bondary import BondaryLoss
-from src.losses.cross_entropy import CrossEntropy
-from src.utils.variables import num_classes, device, PIDNET_S_WEIGHTS, IGNORE_INDEX, categories
-from src.models.pidnet import FullPIDNetModel, PIDNet
-from src.utils.utils import get_mious_per_category
+from src.losses.pidnet import PIDNetLoss, PIDNetCrossEntropy
+from src.models.pidnet import PIDNet
+from src.utils.utils import save_checkpoint
 
 
 def get_pidnet(model_name, num_classes, pretrained_weights, imgnet_pretrained) -> PIDNet:
@@ -23,18 +27,18 @@ def get_pidnet(model_name, num_classes, pretrained_weights, imgnet_pretrained) -
         pretrained_state = {k: v for k, v in pretrained_state.items() if (k in model_dict and v.shape == model_dict[k].shape)}
         model_dict.update(pretrained_state)
         msg = 'Loaded {} parameters!'.format(len(pretrained_state))
-        print('Attention!!!')
-        print(msg)
-        print('Over!!!')
+        logging.info('Attention!!!')
+        logging.info(msg)
+        logging.info('Over!!!')
         model.load_state_dict(model_dict, strict = False)
     else:
         pretrained_dict = torch.load(pretrained_weights, map_location='cpu')
         model_dict = model.state_dict()
         pretrained_dict = {k[6:]: v for k, v in pretrained_dict.items() if (k[6:] in model_dict and v.shape == model_dict[k[6:]].shape)}
         msg = 'Loaded {} parameters!'.format(len(pretrained_dict))
-        print('Attention!!!')
-        print(msg)
-        print('Over!!!')
+        logging.info('Attention!!!')
+        logging.info(msg)
+        logging.info('Over!!!')
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict, strict = False)
 
@@ -53,39 +57,65 @@ def get_pred_model(name, num_classes):
     return model
 
 
-def pidnet_model_setup(pidnet_model, pretrained, learning_rate, weight_decay, step_size, gamma, optimizer_fun, momentum=None, ce_weights=None):
+def pidnet_model_setup(cfg, device): 
     
-    if optimizer_fun is torch.optim.SGD:
-        assert momentum is not None, "Momentum value must be provided for SGD optimizer."
+    if cfg.training.optimizer == "SGD":
+        assert cfg.training.momentum is not None, "Momentum value must be provided for SGD optimizer."
     
-    pidnet = get_pidnet(pidnet_model, num_classes, PIDNET_S_WEIGHTS, imgnet_pretrained=pretrained)
-    model = FullPIDNetModel(pidnet, sem_loss=CrossEntropy(ignore_label=IGNORE_INDEX, weight=ce_weights), bd_loss=BondaryLoss())
+    pretrained_weights = os.path.join(cfg.path.weights, f"{cfg.model.model}.pth")
+    
+    match cfg.training.criterion:
+        case "cross_entropy":
+            sem_loss = PIDNetCrossEntropy(weight=cfg.training.loss_weights, ignore_label=cfg.model.ignore_index)
+        case "ohem":
+            sem_loss = OhemCrossEntropy(weight=cfg.training.loss_weights, ignore_label=cfg.model.ignore_index, thresh=0.7, min_kept=100000)
+        case "focal":
+            sem_loss = FocalLoss(weight=cfg.training.loss_weights, ignore_label=cfg.model.ignore_index, gamma=2.0)
+        case _:
+            raise ValueError(f"Unsupported loss type: {cfg.training.criterion}")
+    
+    bd_loss = BondaryLoss()
+    
+    model = get_pidnet(cfg.model.model, cfg.model.num_classes, pretrained_weights, imgnet_pretrained=True)
+    criterion = PIDNetLoss(sem_loss=sem_loss, bd_loss=bd_loss, ignore_index=cfg.model.ignore_index)
+    
     model = model.to(device)
     
-    if optimizer_fun is torch.optim.SGD:
-        optimizer = optimizer_fun(model.parameters(), lr = learning_rate, momentum = momentum, weight_decay = weight_decay)
-    else:
-        optimizer = optimizer_fun(model.parameters(), lr = learning_rate, weight_decay = weight_decay)
+    match cfg.training.optimizer:
+        case "SGD":
+            optimizer = torch.optim.SGD(model.parameters(), lr = cfg.training.learning_rate, momentum = cfg.training.momentum, weight_decay = cfg.training.weight_decay)
+        case "Adam":
+            optimizer = torch.optim.Adam(model.parameters(), lr = cfg.training.learning_rate, weight_decay = cfg.training.weight_decay)
+        case "AdamW":
+            optimizer = torch.optim.AdamW(model.parameters(), lr = cfg.training.learning_rate, weight_decay = cfg.training.weight_decay)
+        case _:
+            raise ValueError(f"Unsupported optimizer type: {cfg.training.optimizer}")
 
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+    match cfg.training.scheduler:
+        case "step_lr":
+            scheduler = lr_scheduler.StepLR(optimizer, step_size=cfg.training.step_size, gamma=cfg.training.gamma)
+        case "poly":
+            scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda epoch: (1 - epoch / cfg.training.epochs) ** cfg.training.power)
+        case "cosine":
+            scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.training.epochs, eta_min=cfg.training.eta_min)
+        case _:
+            raise NotImplementedError(f"Unsupported scheduler type: {cfg.training.scheduler}")
     
-    return model, optimizer, scheduler
+    return model, criterion, optimizer, scheduler
 
 
 @torch.no_grad()
-def evaluate_pidnet(model, dataloader, device, log_frequency) -> tuple:
+def evaluate_pidnet(model, num_classes, dataloader, criterion, epoch, tot_epochs, device, log_frequency):
 
-    model.eval()
+    logging.info(f"PIDNet - Evaluation | Epoch {epoch + 1}/{tot_epochs}")
     
-    print("=== Evaluation ===")
+    model.eval()
 
-    step = 0
-    running_loss = 0.0
-    data_len = 0
-    iou_scores = 0.0
-    ious_per_class = torch.zeros(num_classes)
+    tot_loss = 0.0
+    data_len, tot_batches = 0, len(dataloader)
+    miou, ious = 0.0, torch.zeros(num_classes)
 
-    for (inputs, masks, boundaries) in dataloader:
+    for i, (inputs, masks, boundaries) in enumerate(dataloader):
 
         data_len += inputs.size(0)
 
@@ -94,41 +124,48 @@ def evaluate_pidnet(model, dataloader, device, log_frequency) -> tuple:
         boundaries = boundaries.to(device)
 
         # Forward pass
-        loss, outputs, _, [loss_s, loss_b, loss_sb] = model(inputs, masks, boundaries)
-        running_loss += loss.item() * inputs.size(0)
-
-        # Calculate mIoU
-        iou, iou_per_class = calculate_iou(outputs[1], masks, num_classes)
-        iou_scores += iou.item() * inputs.size(0)
-        ious_per_class += iou_per_class.cpu() * inputs.size(0)
+        #loss, outputs, _, [loss_s, loss_b, loss_sb] = model(inputs, masks, boundaries)
+        outputs = model(inputs)
+        loss_s, loss_b, loss_sb = criterion(outputs, masks, boundaries)
+        loss = loss_s + loss_b + loss_sb
         
-        if (step + 1) % log_frequency == 0:
-            print(f"Iteration {step+1}, Loss: {running_loss / data_len:.3f}, mIoU: {100 * iou_scores / data_len:.2f}%"
-                  f"\tLoss_s: {loss_s.item():.3f}, Loss_b: {loss_b.item():.3f}, Loss_sb: {loss_sb.item():.3f}")
+        tot_loss += loss.item() * inputs.size(0)
+
+        # Calculate mIoU: predictions == outputs[1]
+        batch_miou, batch_ious = compute_iou(outputs[1], masks, num_classes)
+        miou += batch_miou.item() * inputs.size(0)
+        ious += batch_ious.cpu() * inputs.size(0)
         
-        step += 1
+        if (i + 1) % log_frequency == 0:
+            logging.info(f"Epoch {epoch + 1}/{tot_epochs} | Batch {i + 1}/{tot_batches} | Loss: {tot_loss / data_len:.4f} | mIoU (%): {100 * miou / data_len:.2f}")
+        
+    tot_loss = tot_loss / data_len
+    miou = 100 * miou / data_len
+    ious = 100 * ious / data_len
 
-    mIoU = 100 * iou_scores / data_len
-    loss = running_loss / data_len
-    mious_per_class = 100 * ious_per_class / data_len
-
-    return loss, mIoU, mious_per_class
+    return tot_loss, miou, ious
 
 
-def train_pidnet(model, trainloader, validloader, optimizer, scheduler, num_epochs, device, log_frequency):
+def train_pidnet(model, num_classes, trainloader, validloader, criterion, optimizer, scheduler, num_epochs, checkpoint_dir, device, log_frequency):
     
-    val_losses = []
-    train_losses = []
-    miou_scores, miou_scores_per_category = [], []
+    logging.info("PIDNet - Training")
+    logging.info(f"Training epochs: {num_epochs}")
+    
+    train_losses, val_losses = [], []
+    train_losses_s, train_losses_b, train_losses_sb = [], [], []
+    train_mious, val_mious = [], []
+    train_ious, val_ious = [], []
+    best_val_miou, best_epoch = None, None
 
     for epoch in range(num_epochs):
 
-        data_len = 0
-        current_step = 0
-        train_loss = 0.0
+        data_len, tot_batches = 0, len(trainloader)
+        train_loss, train_loss_s, train_loss_b, train_loss_sb = 0.0, 0.0, 0.0, 0.0
+        train_epoch_miou, train_epoch_ious = 0.0, torch.zeros(num_classes)
+        
         model.train()
 
-        for (inputs, masks, boundaries) in trainloader:
+        for i, (inputs, masks, boundaries) in enumerate(trainloader):
 
             inputs = inputs.to(device)
             masks = masks.to(device)
@@ -137,39 +174,80 @@ def train_pidnet(model, trainloader, validloader, optimizer, scheduler, num_epoc
 
             # Forward pass
             optimizer.zero_grad()
-            loss, _, _, [loss_s, loss_b, loss_sb] = model(inputs, masks, boundaries)
+            #loss, outputs, _, [loss_s, loss_b, loss_sb] = model(inputs, masks, boundaries)
+            outputs = model(inputs)
+            loss_s, loss_b, loss_sb = criterion(outputs, masks, boundaries)
+            loss = loss_s + loss_b + loss_sb
+            
             train_loss += loss.item() * inputs.size(0)
+            train_loss_s += loss_s.item() * inputs.size(0)
+            train_loss_b += loss_b.item() * inputs.size(0)
+            train_loss_sb += loss_sb.item() * inputs.size(0)
 
             # Backward pass
             loss.backward()
             optimizer.step()
+            
+            # mIoU: predictions == outputs[1]
+            batch_miou, batch_ious = compute_iou(outputs[1], masks, num_classes)
+            train_epoch_miou += batch_miou.item() * inputs.size(0)
+            train_epoch_ious += batch_ious.cpu() * inputs.size(0)
 
-            if current_step % log_frequency == 0:
-                print(f"Epoch {epoch+1}, Iteration {current_step}, Current Loss: {train_loss/data_len:.3f} "
-                      f"\tLoss_s: {loss_s.item():.3f}, Loss_b: {loss_b.item():.3f}, Loss_sb: {loss_sb.item():.3f}")
+            if (i + 1) % log_frequency == 0:
+                logging.info(f"Epoch {epoch + 1}/{num_epochs} | Batch {i + 1}/{tot_batches} | Loss: {train_loss / data_len:.4f} (Semantic: {train_loss_s / data_len:.4f}, Boundary: {train_loss_b / data_len:.4f}, BAS: {train_loss_sb / data_len:.4f}) | mIoU (%): {100 * train_epoch_miou / data_len:.2f}")
 
-            current_step += 1
+        train_loss = train_loss / data_len
+        train_loss_s = train_loss_s / data_len
+        train_loss_b = train_loss_b / data_len
+        train_loss_sb = train_loss_sb / data_len
+        train_epoch_miou = 100 * train_epoch_miou / data_len
+        train_epoch_ious = 100 * train_epoch_ious / data_len
 
-        train_loss /= data_len
+        val_loss, val_epoch_miou, val_epoch_ious = evaluate_pidnet(model, num_classes, validloader, criterion, epoch, num_epochs, device, log_frequency)
 
-        print(f"End of Epoch {epoch+1}")
-        print(f"Training loss: {train_loss:.5f}")
+        #mious_per_category = get_mious_per_category(mious_per_class)
 
-        val_loss, val_miou, mious_per_class = evaluate_pidnet(model, validloader, device, log_frequency)
-
-        print(f"Validation mIoU: {val_miou:.2f}%, Validation loss: {val_loss:.5f}")
-
-        mious_per_category = get_mious_per_category(mious_per_class)
-
-        val_losses.append(val_loss)
-        train_losses.append(train_loss)
-        miou_scores.append(val_miou)
-        miou_scores_per_category.append(mious_per_category)
-
-        print()
+        train_losses.append(float(train_loss))
+        val_losses.append(float(val_loss))
+        train_losses_s.append(float(train_loss_s))
+        train_losses_b.append(float(train_loss_b))
+        train_losses_sb.append(float(train_loss_sb))
+        train_mious.append(float(train_epoch_miou))
+        val_mious.append(float(val_epoch_miou))
+        train_ious.append(train_epoch_ious.tolist())
+        val_ious.append(val_epoch_ious.tolist())
         
+        logging.info(f"Epoch {epoch + 1}/{num_epochs} | Train Loss: {train_loss:.4f} (Semantic: {train_loss_s:.4f}, Boundary: {train_loss_b:.4f}, BAS: {train_loss_sb:.4f}) | Train mIoU (%): {train_epoch_miou:.2f} | Val Loss: {val_loss:.4f} | Val mIoU (%): {val_epoch_miou:.2f}")
+        
+        if best_val_miou is None or val_epoch_miou > best_val_miou:
+            prev_best_epoch = best_epoch
+            best_val_miou = val_epoch_miou
+            best_epoch = epoch
+            chp_path = os.path.join(checkpoint_dir, f"best_pidnet_{epoch + 1}.pth.tar")
+            save_checkpoint(chp_path, epoch, model, optimizer, scheduler, val_epoch_miou, val_epoch_ious)
+            
+            # Remove previous best checkpoint
+            if prev_best_epoch is not None:
+                prev_chp_path = os.path.join(checkpoint_dir, f"best_pidnet_{prev_best_epoch + 1}.pth.tar")
+                if os.path.exists(prev_chp_path):
+                    os.remove(prev_chp_path)
+
         # Scheduler is None if learning rate is constant
         if scheduler is not None:
             scheduler.step()
+            
+    # Save last epoch checkpoint
+    last_chp_path = os.path.join(checkpoint_dir, f"last_pidnet_{num_epochs}.pth.tar")
+    save_checkpoint(last_chp_path, epoch, model, optimizer, scheduler, val_epoch_miou, val_epoch_ious)
     
-    return train_losses, val_losses, miou_scores, miou_scores_per_category
+    return {
+        "train_losses": train_losses,
+        "val_losses": val_losses,
+        "train_losses_s": train_losses_s,
+        "train_losses_b": train_losses_b,
+        "train_losses_sb": train_losses_sb,
+        "train_mious": train_mious,
+        "val_mious": val_mious,
+        "train_ious": train_ious,
+        "val_ious": val_ious
+    }

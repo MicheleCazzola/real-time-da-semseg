@@ -11,13 +11,14 @@ def weighted_bce(bd_pre, target):
     neg_index = (target_t == 0)
 
     weight = torch.zeros_like(log_p)
-    pos_num = pos_index.sum()
-    neg_num = neg_index.sum()
+    pos_num = pos_index.float().sum()
+    neg_num = neg_index.float().sum()
     sum_num = pos_num + neg_num
-    weight[pos_index] = neg_num * 1.0 / sum_num
-    weight[neg_index] = pos_num * 1.0 / sum_num
+    
+    weight[pos_index] = neg_num / sum_num
+    weight[neg_index] = pos_num / sum_num
 
-    loss = F.binary_cross_entropy_with_logits(log_p, target_t, weight, reduction='mean')
+    loss = F.binary_cross_entropy_with_logits(log_p, target_t, weight=weight, reduction='mean')
 
     return loss
 
@@ -28,6 +29,4 @@ class BondaryLoss(nn.Module):
 
     def forward(self, bd_pre, bd_gt):
         bce_loss = self.coeff_bce * weighted_bce(bd_pre, bd_gt)
-        loss = bce_loss
-
-        return loss
+        return bce_loss

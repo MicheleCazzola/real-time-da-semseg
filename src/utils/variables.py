@@ -24,22 +24,45 @@ PIDNET_S_ID = "1hIBp_8maRr60-B3PF0NVtaA6TYBvO4y-"
 STDC1_WEIGHTS = f"{PRETRAINED_WEIGHTS_DIR}/STDC1_pretrained_weights.pth"
 STDC1_ID = "1DFoXcV42zy-apUcMh5P8WhsXMRJofgl8"
 
-IGNORE_INDEX = -1
-
-RGB = 'RGB'
-grayscale = 'L'
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-class Domain(Enum):
-    RURAL = 0
-    URBAN = 1
+class Domain(str, Enum):
+    RURAL = "rural"
+    URBAN = "urban"
+    
+    def __str__(self):
+        return self.value
+    
+    def values():
+        return [Domain.RURAL, Domain.URBAN]
 
-class ModelType(Enum):
-    DEEPLAB = 0
-    PIDNET = 1
-    BISENET = 2
-    STDC = 3
+class ModelType(str, Enum):
+    DEEPLAB_V2 = "deeplab_v2"
+    PIDNET_S = "pidnet_s"
+    PIDNET_M = "pidnet_m"
+    PIDNET_L = "pidnet_l"
+    BISENET_V1 = "bisenet_v1"
+    BISENET_V2 = "bisenet_v2"
+    STDC1 = "stdc1"
+    STDC2 = "stdc2"
+    
+    def __str__(self):
+        return self.value
+    
+    def values():
+        return [
+            ModelType.DEEPLAB_V2, ModelType.PIDNET_S, ModelType.PIDNET_M, ModelType.PIDNET_L,
+            ModelType.BISENET_V1, ModelType.BISENET_V2, ModelType.STDC1, ModelType.STDC2
+        ]
+class AdaptationMethod(str, Enum):
+    ADDA = "adda"
+    DACS = "dacs"
+    
+    def __str__(self):
+        return self.value
+    
+    def values():
+        return [AdaptationMethod.ADDA, AdaptationMethod.DACS]
 
 categories = {
     'BARREN': (0.003921568859368563, (159, 129, 183)),       # Lilla
@@ -54,11 +77,6 @@ categories = {
 categories = dict(sorted(categories.items(), key=lambda item: item[1][0]))
 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-
-num_classes = len(categories.keys())
-
-IMAGENET_MEAN = [0.485, 0.456, 0.406]
-IMAGENET_STD = [0.229, 0.224, 0.225]
 
 urban_percentage = [48.5, 21.2, 9.3, 3.7, 7.6, 7.9, 1.9]
 rural_percentage = [42.9, 3.7, 2.6, 11.6, 3.6, 5.0, 30.5]
