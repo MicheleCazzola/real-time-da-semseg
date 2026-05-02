@@ -44,8 +44,6 @@ if __name__ == "__main__":
     parser.add_argument('--output-dir', type=str, help='Directory where outputs (checkpoints, logs, results) will be saved.')
     args = parser.parse_args()
     
-    print(f"Parsed arguments: {args}")
-    
     with open(args.from_config, 'r') as f:
         cfg = Box(yaml.safe_load(f))
         

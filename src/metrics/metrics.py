@@ -37,7 +37,7 @@ def compute_avg_std(dataset, dataloader, device):
     
     
 def compute_iou(outputs, masks, num_classes):
-
+    
     # Avoid using argmax on MPS due to potential issues with autograd and NaN values
     if outputs.device.type == 'mps':
         preds = torch.argmax(outputs.cpu(), dim=1).to(outputs.device)

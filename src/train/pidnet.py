@@ -130,7 +130,7 @@ def evaluate_pidnet(model, num_classes, dataloader, criterion, epoch, tot_epochs
         loss = loss_s + loss_b + loss_sb
         
         tot_loss += loss.item() * inputs.size(0)
-
+        
         # Calculate mIoU: predictions == outputs[1]
         batch_miou, batch_ious = compute_iou(outputs[1], masks, num_classes)
         miou += batch_miou.item() * inputs.size(0)
