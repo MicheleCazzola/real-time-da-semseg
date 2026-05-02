@@ -4,7 +4,7 @@ path:
   train_dir: "Train"
   val_dir: "Val"
   source: "urban"
-  target: "rural"
+  target: "urban"
   images: "images_png"
   masks: "masks_png"
   checkpoints: "models/checkpoints"
@@ -23,7 +23,7 @@ data:
   augment: false
 
 model:
-  model: "pidnet_s"
+  model: "bisenet_v1_rt"
   checkpoint: null
   ignore_index: -1
   num_classes: 7
@@ -35,14 +35,14 @@ training:
   resume: false
   adaptation: false
   epochs: 20
-  criterion: "ohem"
+  criterion: "cross_entropy"
   loss_weights: null
-  optimizer: "SGD"
+  optimizer: "AdamW"
   scheduler: "poly"
   power: 0.9
   eta_min: 1.e-6
-  learning_rate: 5.e-3
-  weight_decay: 5.e-4
+  learning_rate: 1.e-4
+  weight_decay: 1.e-4
   step_size: 10
   gamma: 0.1
   momentum: 0.9
