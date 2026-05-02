@@ -1,17 +1,12 @@
 import logging
 import os
-import json
-from unittest import case
 import yaml
 from box import Box
 from datetime import datetime
 
-import torch
 import argparse
-import matplotlib.pyplot as plt
 
 from src.dataset.dataset import LoveDA
-from src.dataset.utils import download_to_gdrive, copy_to_gdrive, extract_from_gdrive, compute_class_distribution, calc_weights
 from src.dataset.augmentations import get_augmentations
 from src.metrics.metrics import compute_performance_metrics
 from src.utils.plot import plot_class_distribution, plot_results
@@ -42,6 +37,7 @@ if __name__ == "__main__":
     parser.add_argument('--reduce-factor', type=float, default=1.0, help='Factor (ratio) by which to reduce the dataset size for faster experimentation.')
     parser.add_argument('--epochs', type=int, help='Number of training epochs.')
     parser.add_argument('--output-dir', type=str, help='Directory where outputs (checkpoints, logs, results) will be saved.')
+    parser.add_argument('--iterations', type=int, default=1000, help='Number of iterations for performance measurement.')
     args = parser.parse_args()
     
     with open(args.from_config, 'r') as f:
@@ -120,7 +116,7 @@ if __name__ == "__main__":
             if cfg.training.measure:
                 resource_metrics = compute_performance_metrics(
                     model, cfg.model.num_classes, device, cfg.data.dimensions.height, cfg.data.dimensions.width,
-                    iterations=200, mask_required=False, bd_required=False, save_to=os.path.join(output_dir, f"performance_metrics.json"), return_out=False
+                    iterations=args.iterations, mask_required=False, bd_required=False, save_to=os.path.join(output_dir, f"performance_metrics.json"), return_out=False
                 )
 
         case ModelType.PIDNET_S.value | ModelType.PIDNET_M.value | ModelType.PIDNET_L.value:
@@ -155,8 +151,8 @@ if __name__ == "__main__":
                 )
             if cfg.training.measure:
                 resource_metrics = compute_performance_metrics(
-                    model.model, cfg.model.num_classes, device, cfg.data.dimensions.height, cfg.data.dimensions.width,
-                    iterations=200, mask_required=False, bd_required=False, save_to=os.path.join(output_dir, f"performance_metrics.json"), return_out=False
+                    model, cfg.model.num_classes, device, cfg.data.dimensions.height, cfg.data.dimensions.width,
+                    iterations=args.iterations, mask_required=False, bd_required=False, save_to=os.path.join(output_dir, f"performance_metrics.json"), return_out=False
                 )
 
         case ModelType.BISENET_V1.value | ModelType.BISENET_V2.value:
@@ -193,7 +189,7 @@ if __name__ == "__main__":
             if cfg.training.measure:
                 resource_metrics = compute_performance_metrics(
                     model, cfg.model.num_classes, device, cfg.data.dimensions.height, cfg.data.dimensions.width,
-                    iterations=200, mask_required=False, bd_required=False, save_to=os.path.join(output_dir, f"performance_metrics.json"), return_out=False
+                    iterations=args.iterations, mask_required=False, bd_required=False, save_to=os.path.join(output_dir, f"performance_metrics.json"), return_out=False
                 )
             
         case ModelType.STDC1.value | ModelType.STDC2.value:
@@ -232,7 +228,7 @@ if __name__ == "__main__":
             if cfg.training.measure:
                 resource_metrics = compute_performance_metrics(
                     model, cfg.model.num_classes, device, cfg.data.dimensions.height, cfg.data.dimensions.width,
-                    iterations=200, mask_required=False, bd_required=False, save_to=os.path.join(output_dir, f"performance_metrics.json"), return_out=False
+                    iterations=args.iterations, mask_required=False, bd_required=False, save_to=os.path.join(output_dir, f"performance_metrics.json"), return_out=False
                 )
             
         case _:

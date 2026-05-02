@@ -62,7 +62,7 @@ def compute_iou(outputs, masks, num_classes):
     return miou, ious
 
 @torch.no_grad()
-def calculate_fps_latency(model, device, iterations, num_classes, height, width, mask_required=False, bd_required=False):
+def compute_fps(model, device, iterations, num_classes, height, width, mask_required=False, bd_required=False):
     
     # Warmup
     warmpup_iterations = 100 if str(device) in ["cuda", "mps"] else 10
@@ -93,6 +93,7 @@ def calculate_fps_latency(model, device, iterations, num_classes, height, width,
         torch.cuda.synchronize()
         
         elapsed = start_event.elapsed_time(end_event) / 1000
+        
     elif device == "mps":
         torch.mps.synchronize()
         
@@ -113,25 +114,84 @@ def calculate_fps_latency(model, device, iterations, num_classes, height, width,
         elapsed = (end_time - start_time) / 1e9
         
     fps = iterations / elapsed
-    mean_latency = 1 / fps
     
-    logging.info(f"Computed FPS and average latency over {iterations} iterations")
+    logging.info(f"Computed FPS over {iterations} iterations: {fps:.2f} on {device}")
     
-    return fps, mean_latency
+    return fps
 
-#### FLOPS, Params
-def calculate_flops_params(model, device, num_classes, height, width, mask_required=False, bd_required=False):
-    model = model.to(device)
+@torch.no_grad()
+def compute_latency(model, device, iterations, num_classes, height, width, mask_required=False, bd_required=False):
     
+    # Warmup
+    warmpup_iterations = 100 if str(device) in ["cuda", "mps"] else 10
+    for _ in range(warmpup_iterations):
+        input_data = make_input(num_classes, height, width, mask_required, bd_required)
+        input_data = tuple(d.to(device) for d in input_data)
+        _ = model(*input_data)
+        
+    logging.info(f"Warmup completed with {warmpup_iterations} iterations on {device}")
+        
+    pool_size = 200
+    input_pool = []
+    for _ in range(pool_size):
+        data = make_input(num_classes, height, width, mask_required, bd_required)
+        input_pool.append(tuple(d.to(device) for d in data))
+        
+    latencies = []
+    for i in range(iterations):
+        if device == "cuda":
+            torch.cuda.synchronize()
+            
+            start_event = torch.cuda.Event(enable_timing=True)
+            end_event = torch.cuda.Event(enable_timing=True)
+            start_event.record()
+            _ = model(*input_pool[i % pool_size])
+            end_event.record()
+            
+            torch.cuda.synchronize()
+            elapsed = start_event.elapsed_time(end_event) / 1000
+        elif device == "mps":
+            torch.mps.synchronize()
+            
+            start_time = time.perf_counter_ns()
+            _ = model(*input_pool[i % pool_size])
+            torch.mps.synchronize()
+            end_time = time.perf_counter_ns()
+            
+            elapsed = (end_time - start_time) / 1e9
+        else:
+            start_time = time.perf_counter_ns()
+            _ = model(*input_pool[i % pool_size])
+            end_time = time.perf_counter_ns()
+            
+            elapsed = (end_time - start_time) / 1e9
+        
+        latencies.append(elapsed)
+    
+    mean_latency = np.mean(latencies)
+    std_latency = np.std(latencies)
+    
+    logging.info(f"Computed latency over {iterations} iterations: Mean = {mean_latency:.4f} s, Std = {std_latency:.4f} s on {device}")
+    
+    return float(mean_latency), float(std_latency)
+
+@torch.no_grad()
+def compute_num_params(model):
     num_params = sum(p.numel() for p in model.parameters())
+    logging.info(f"Computed number of parameters: {num_params}")
+    return num_params
+
+@torch.no_grad()
+def compute_flops(model, device, num_classes, height, width, mask_required=False, bd_required=False):
+    model = model.to(device)
     
     input_data = make_input(num_classes, height, width, mask_required, bd_required)
     input_data = tuple(d.to(device) for d in input_data)
     flops = FlopCountAnalysis(model, input_data)
     
-    logging.info(f"Computed FLOPs and parameter count")
+    logging.info(f"Computed FLOPs")
     
-    return num_params, flops.total(), flop_count_table(flops)
+    return flops.total(), flop_count_table(flops)
     
 def make_input(num_classes, height, width, mask_required=False, bd_required=False):
     input_data = [torch.randn(1, 3, height, width)]
@@ -145,27 +205,26 @@ def make_input(num_classes, height, width, mask_required=False, bd_required=Fals
 def compute_performance_metrics(model, num_classes, device, height, width, iterations, mask_required=False, bd_required=False, save_to=None, return_out=False):
     model.eval()
     
-    fps, mean_latency = calculate_fps_latency(model, device, iterations, num_classes, height, width, mask_required=mask_required, bd_required=bd_required)
-
-    # Needs CPU for FLOPs with fvcore
-    num_params, total_flops, flop_table = calculate_flops_params(model, "cpu", num_classes, height, width, mask_required=mask_required, bd_required=bd_required)
+    fps = compute_fps(model, device, iterations, num_classes, height, width, mask_required=mask_required, bd_required=bd_required)
+    mean_latency, std_latency = compute_latency(model, device, iterations, num_classes, height, width, mask_required=mask_required, bd_required=bd_required)
     
+    num_params = compute_num_params(model)
+    
+    # Needs CPU for FLOPs with fvcore
+    total_flops, flop_table = compute_flops(model, "cpu", num_classes, height, width, mask_required=mask_required, bd_required=bd_required)
+    
+    performance_result = {
+        "fps": fps,
+        "mean_latency": mean_latency,
+        "std_latency": std_latency,
+        "num_params": num_params,
+        "total_flops": total_flops,
+        "flop_table": flop_table 
+    }
     if save_to is not None:
-        json_str = json.dumps({
-            "fps": fps,
-            "mean_latency": mean_latency,
-            "num_params": num_params,
-            "total_flops": total_flops,
-            "flop_table": flop_table
-        }, indent=4)
+        json_str = json.dumps(performance_result, indent=4)
         with open(save_to, "w") as f:
             f.write(json_str)
     
     if return_out:
-        return {
-            "fps": fps,
-            "mean_latency": mean_latency,
-            "num_params": num_params,
-            "total_flops": total_flops,
-            "flop_table": flop_table
-        }
+        return performance_result
