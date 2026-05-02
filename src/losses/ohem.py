@@ -1,57 +1,60 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class OhemCrossEntropy(nn.Module):
+class OHEMCrossEntropy(nn.Module):
     def __init__(self, ignore_label=-1, thres=0.7, min_kept=100000, weight=None):
-        super(OhemCrossEntropy, self).__init__()
+        super(OHEMCrossEntropy, self).__init__()
         self.thresh = thres
         self.min_kept = max(1, min_kept)
         self.ignore_label = ignore_label
-        self.criterion = nn.CrossEntropyLoss(
-            weight=weight,
-            ignore_index=ignore_label,
-            reduction='none'
-        )
-
-    def _ce_forward(self, score, target):
-
-        loss = self.criterion(score, target)
-
-        return loss.mean()
-
-    def _ohem_forward(self, score, target, **kwargs):
-
-        pred = F.softmax(score, dim=1)
-        pixel_losses = self.criterion(score, target).contiguous().view(-1)
-        mask = target.contiguous().view(-1) != self.ignore_label
-
-        tmp_target = target.clone()
-        tmp_target[tmp_target == self.ignore_label] = 0
-        pred = pred.gather(1, tmp_target.unsqueeze(1))
-        pred, ind = pred.contiguous().view(-1,)[mask].contiguous().sort()
-
-        min_value = pred[min(self.min_kept, pred.numel() - 1)]
-
-        threshold = max(min_value, self.thresh)
-
-        pixel_losses = pixel_losses[mask][ind]
-        pixel_losses = pixel_losses[pred < threshold]
-        return pixel_losses.mean()
+        self.weight = weight
 
     def forward(self, score, target):
+        
+        # 2d cross-entropy
+        pixel_losses = F.cross_entropy(
+            score, 
+            target, 
+            weight=self.weight, 
+            ignore_index=self.ignore_label, 
+            reduction='none'
+        ).view(-1)
+        
+        # Mask out ignored pixels
+        mask = (target != self.ignore_label).view(-1)
+        valid_pixels = mask.sum()
+        
+        if valid_pixels == 0:
+            return torch.tensor(0.0, device=score.device)
 
-        if not (isinstance(score, list) or isinstance(score, tuple)):
-            score = [score]
-
-        balance_weights = [0.4, 1.0]
-        sb_weights = 1.0
-
-        if len(balance_weights) == len(score):
-            functions = [self._ce_forward] * (len(balance_weights) - 1) + [self._ohem_forward]
-            return sum([w * func(x, target) for (w, x, func) in zip(balance_weights, score, functions)])
-
-        elif len(score) == 1:
-            return sb_weights * self._ohem_forward(score[0], target)
-
+        # Ground truth confidences
+        pred = F.softmax(score, dim=1)
+        tmp_target = target.clone()
+        tmp_target[tmp_target == self.ignore_label] = 0
+        
+        confidences = pred.gather(1, tmp_target.unsqueeze(1)).view(-1)
+        confidences = confidences[mask]
+        valid_losses = pixel_losses[mask]
+        
+        # Sort: low confidence = hard example
+        confidences, ind = confidences.sort()
+        valid_losses = valid_losses[ind]
+        
+        # Determine threshold
+        kept_limit = min(self.min_kept, confidences.numel())
+        if kept_limit > 0:
+            min_value = confidences[kept_limit - 1]
+            threshold = max(min_value.item(), self.thresh)
         else:
-            raise ValueError("lengths of prediction and target are not identical!")
+            threshold = self.thresh
+            
+        # Mask for hard examples
+        ohem_mask = confidences < threshold
+        kept_losses = valid_losses[ohem_mask]
+        
+        # Average over hard examples if any, otherwise average over all valid examples
+        if kept_losses.numel() > 0:
+            return kept_losses.mean()
+        else:
+            return valid_losses.mean()

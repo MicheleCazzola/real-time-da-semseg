@@ -14,9 +14,9 @@ from src.train.stdc import evaluate_stdc
 
 def trainset_setup(cfg, domain, g, seed_worker, num_workers, augmentations=A.NoOp(p=1), boundaries=False, reduce_factor=1):
     train_transform = A.Compose([
-        A.Normalize(mean=cfg.data.imagenet_mean, std=cfg.data.imagenet_std, p=1, always_apply=True, max_pixel_value=255),
+        A.Normalize(mean=cfg.data.imagenet_mean, std=cfg.data.imagenet_std, p=1, max_pixel_value=255),
         augmentations,
-        A.Resize(cfg.data.resize["height"], cfg.data.resize["width"], p=1, always_apply=True),
+        A.Resize(cfg.data.resize["height"], cfg.data.resize["width"], p=1),
         A.ToTensorV2(transpose_mask=True)
     ])
     train_root = os.path.join(cfg.path.root, cfg.path.train_dir)
@@ -29,7 +29,7 @@ def trainset_setup(cfg, domain, g, seed_worker, num_workers, augmentations=A.NoO
 
 def validset_setup(cfg, domain, num_workers, g, seed_worker, boundaries=False, reduce_factor=1):
     val_transform = A.Compose([
-        A.Normalize(mean=cfg.data.imagenet_mean, std=cfg.data.imagenet_std, p=1, always_apply=True, max_pixel_value=255),
+        A.Normalize(mean=cfg.data.imagenet_mean, std=cfg.data.imagenet_std, p=1, max_pixel_value=255),
         A.ToTensorV2(transpose_mask=True)
     ])
     val_root = os.path.join(cfg.path.root, cfg.path.val_dir)

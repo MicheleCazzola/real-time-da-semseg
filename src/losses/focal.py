@@ -1,41 +1,35 @@
 import torch
-import torch.nn as nn
+import torch.nn as nn   
+import torch.nn.functional as F
 
 class FocalLoss(nn.Module):
-    def __init__(self, gamma=0, alpha=None, ignore_label=-1, weight=None):
+    def __init__(self, gamma=2.0, alpha=None, ignore_label=-1):
         super(FocalLoss, self).__init__()
+        
+        assert gamma >= 0, "Gamma should be non-negative"
+        assert alpha is None or (isinstance(alpha, torch.Tensor) and alpha.dim() == 1), "Alpha should be a 1D tensor or None"
+        
         self.ignore_label = ignore_label
         self.gamma = gamma
         self.alpha = alpha
-        self.criterion = nn.CrossEntropyLoss(
-            weight=weight,
-            ignore_index=ignore_label
-        )
-
-    def _forward(self, score, target):
-
-        ce_loss = self.criterion(score, target)
-
-        pt = torch.exp(-ce_loss)
-        focal_loss = torch.pow(1 - pt, self.gamma)
-
-        if self.alpha is not None:
-            return self.alpha * focal_loss
-        return focal_loss
 
     def forward(self, score, target):
 
-        if not (isinstance(score, list) or isinstance(score, tuple)):
-            score = [score]
+        ce_loss = F.cross_entropy(score, target, reduction='none', ignore_index=self.ignore_label)
+        
+        pt = torch.exp(-ce_loss)
+        focal_loss = ((1 - pt) ** self.gamma) * ce_loss
+        
+        # Alpha-balancing 
+        if self.alpha is not None:
+            self.alpha = self.alpha.to(target.device)
+            alpha_t = self.alpha[torch.clamp(target, min=0)]
+            focal_loss = alpha_t * focal_loss
 
-        # From original configs
-        balance_weights = [0.4, 1.0]
-        sb_weights = 1.0
-
-        if len(balance_weights) == len(score):
-            return sum([w * self._forward(x, target) for (w, x) in zip(balance_weights, score)])
-        elif len(score) == 1:
-            return sb_weights * self._forward(score[0], target)
-
+        # Mask out ignored labels
+        valid_mask = (target != self.ignore_label)
+        
+        if valid_mask.sum() > 0:
+            return focal_loss[valid_mask].mean()
         else:
-            raise ValueError("lengths of prediction and target are not identical!")
+            return torch.tensor(0.0, device=score.device)

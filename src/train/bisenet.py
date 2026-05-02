@@ -6,7 +6,7 @@ import torch.optim as optim
 from torch.optim import lr_scheduler
 
 from src.losses.focal import FocalLoss
-from src.losses.ohem import OhemCrossEntropy
+from src.losses.ohem import OHEMCrossEntropy
 from src.metrics.metrics import compute_iou
 from src.models.bisenet import BiSeNet
 from src.utils.utils import get_mious_per_category, save_checkpoint
@@ -19,11 +19,12 @@ def bisenet_model_setup(cfg, backbone_name, device):
         case "cross_entropy":
             criterion = nn.CrossEntropyLoss(weight=cfg.training.loss_weights, ignore_index=cfg.model.ignore_index)
         case "ohem":
-            raise NotImplementedError("OHEM loss is not implemented yet for BiSeNet")
-            criterion = OhemCrossEntropy(weight=cfg.training.loss_weights, ignore_label=cfg.model.ignore_index, thresh=0.7, min_kept=100000)
+            thres = cfg.training.ohem_thres if hasattr(cfg.training, "ohem_thres") else 0.7
+            min_kept = cfg.training.ohem_min_kept if hasattr(cfg.training, "ohem_min_kept") else 100000
+            criterion = OHEMCrossEntropy(weight=cfg.training.loss_weights, ignore_label=cfg.model.ignore_index, thres=thres, min_kept=min_kept)
         case "focal":
-            raise NotImplementedError("Focal loss is not implemented yet for BiSeNet")
-            criterion = FocalLoss(weight=cfg.training.loss_weights, ignore_index=cfg.model.ignore_index, gamma=2.0)
+            gamma = cfg.training.focal_gamma if hasattr(cfg.training, "focal_gamma") else 2.0
+            criterion = FocalLoss(alpha=cfg.training.loss_weights, ignore_index=cfg.model.ignore_index, gamma=gamma)
         case _:
             raise ValueError(f"Unsupported loss type: {cfg.training.criterion}")
 

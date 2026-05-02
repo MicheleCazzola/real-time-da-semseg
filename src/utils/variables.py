@@ -26,6 +26,17 @@ STDC1_ID = "1DFoXcV42zy-apUcMh5P8WhsXMRJofgl8"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+class SemanticLoss(str, Enum):
+    CE = "cross_entropy"
+    OHEM = "ohem"
+    FOCAL = "focal"
+    
+    def __str__(self):
+        return self.value
+    
+    def values():
+        return [SemanticLoss.CE, SemanticLoss.OHEM, SemanticLoss.FOCAL]
+
 class Domain(str, Enum):
     RURAL = "rural"
     URBAN = "urban"
@@ -42,7 +53,7 @@ class ModelType(str, Enum):
     PIDNET_M = "pidnet_m"
     PIDNET_L = "pidnet_l"
     BISENET_V1 = "bisenet_v1"
-    BISENET_V2 = "bisenet_v2"
+    BISENET_V1_RT = "bisenet_v1_rt"
     STDC1 = "stdc1"
     STDC2 = "stdc2"
     
@@ -52,8 +63,9 @@ class ModelType(str, Enum):
     def values():
         return [
             ModelType.DEEPLAB_V2, ModelType.PIDNET_S, ModelType.PIDNET_M, ModelType.PIDNET_L,
-            ModelType.BISENET_V1, ModelType.BISENET_V2, ModelType.STDC1, ModelType.STDC2
+            ModelType.BISENET_V1, ModelType.BISENET_V1_RT, ModelType.STDC1, ModelType.STDC2
         ]
+        
 class AdaptationMethod(str, Enum):
     ADDA = "adda"
     DACS = "dacs"

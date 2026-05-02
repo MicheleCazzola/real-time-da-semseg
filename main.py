@@ -155,8 +155,9 @@ if __name__ == "__main__":
                     iterations=args.iterations, mask_required=False, bd_required=False, save_to=os.path.join(output_dir, f"performance_metrics.json"), return_out=False
                 )
 
-        case ModelType.BISENET_V1.value | ModelType.BISENET_V2.value:
-            model, criterion, optimizer, scheduler = bisenet_model_setup(cfg, "resnet101", device)
+        case ModelType.BISENET_V1.value | ModelType.BISENET_V1_RT.value:
+            backbone_name = "resnet18" if cfg.model.model == ModelType.BISENET_V1_RT.value else "resnet101"
+            model, criterion, optimizer, scheduler = bisenet_model_setup(cfg, backbone_name, device)
                 
             if cfg.training.train:
                 trainset_source, trainloader_source = trainset_setup(cfg, cfg.path.source, g, seed_worker, num_workers, reduce_factor=args.reduce_factor, boundaries=False)

@@ -35,7 +35,7 @@ training:
   resume: false
   adaptation: false
   epochs: 20
-  criterion: "cross_entropy"
+  criterion: "ohem"
   loss_weights: null
   optimizer: "SGD"
   scheduler: "poly"

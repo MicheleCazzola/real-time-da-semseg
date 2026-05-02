@@ -4,10 +4,10 @@ import os
 import logging
 
 from src.losses.focal import FocalLoss
-from src.losses.ohem import OhemCrossEntropy
+from src.losses.ohem import OHEMCrossEntropy
 from src.metrics.metrics import compute_iou
 from src.losses.bondary import BondaryLoss
-from src.losses.pidnet import PIDNetLoss, PIDNetCrossEntropy
+from src.losses.pidnet import PIDNetLoss, PIDNetSemanticLoss
 from src.models.pidnet import PIDNet
 from src.utils.utils import save_checkpoint
 
@@ -64,16 +64,14 @@ def pidnet_model_setup(cfg, device):
     
     pretrained_weights = os.path.join(cfg.path.weights, f"{cfg.model.model}.pth")
     
-    match cfg.training.criterion:
-        case "cross_entropy":
-            sem_loss = PIDNetCrossEntropy(weight=cfg.training.loss_weights, ignore_label=cfg.model.ignore_index)
-        case "ohem":
-            sem_loss = OhemCrossEntropy(weight=cfg.training.loss_weights, ignore_label=cfg.model.ignore_index, thresh=0.7, min_kept=100000)
-        case "focal":
-            sem_loss = FocalLoss(weight=cfg.training.loss_weights, ignore_label=cfg.model.ignore_index, gamma=2.0)
-        case _:
-            raise ValueError(f"Unsupported loss type: {cfg.training.criterion}")
+    keys = ["class_weight", "focal_gamma", "ohem_thres", "ohem_min_kept"]
+    args = {key: getattr(cfg.training, key) for key in keys if hasattr(cfg.training, key)}
     
+    sem_loss = PIDNetSemanticLoss(
+        type=cfg.training.criterion,
+        ignore_label=cfg.model.ignore_index,
+        **args
+    )
     bd_loss = BondaryLoss()
     
     model = get_pidnet(cfg.model.model, cfg.model.num_classes, pretrained_weights, imgnet_pretrained=True)

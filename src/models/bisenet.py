@@ -8,12 +8,13 @@ from torchvision import models
 import torch
 from torch import nn
 import warnings
-warnings.filterwarnings(action='ignore')
+#warnings.filterwarnings(action='ignore')
 
 class resnet18(torch.nn.Module):
     def __init__(self, pretrained=True):
         super().__init__()
-        self.features = models.resnet18(pretrained=pretrained)
+        weights = models.ResNet18_Weights.DEFAULT if pretrained else None
+        self.features = models.resnet18(weights=weights)
         self.conv1 = self.features.conv1
         self.bn1 = self.features.bn1
         self.relu = self.features.relu
@@ -40,7 +41,8 @@ class resnet18(torch.nn.Module):
 class resnet101(torch.nn.Module):
     def __init__(self, pretrained=True):
         super().__init__()
-        self.features = models.resnet101(pretrained=pretrained)
+        weights = models.ResNet101_Weights.DEFAULT if pretrained else None
+        self.features = models.resnet101(weights=weights)
         self.conv1 = self.features.conv1
         self.bn1 = self.features.bn1
         self.relu = self.features.relu

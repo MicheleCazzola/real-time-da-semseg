@@ -4,6 +4,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from src.dataset.dataset import generate_bd
+from .focal import FocalLoss
+from .ohem import OHEMCrossEntropy
+from src.utils.variables import SemanticLoss
 
 def pidnet_loss(outputs, labels, sem_loss, bd_loss, ignore_index=-1, bd_gt=None):
     loss_s = sem_loss(outputs[:-1], labels)
@@ -24,31 +27,56 @@ def pidnet_loss(outputs, labels, sem_loss, bd_loss, ignore_index=-1, bd_gt=None)
     
     return loss_s, loss_b, loss_sb
 
-class PIDNetCrossEntropy(nn.Module):
-    def __init__(self, ignore_label=-1, weight=None):
-        super(PIDNetCrossEntropy, self).__init__()
+class PIDNetSemanticLoss(nn.Module):
+    def __init__(self, type=SemanticLoss.CE, ignore_label=-1, **kwargs):
+        super(PIDNetSemanticLoss, self).__init__()
         self.ignore_label = ignore_label
-        self.criterion = nn.CrossEntropyLoss(
-            weight=weight,
-            ignore_index=ignore_label
-        )
-
-    def _forward(self, score, target):
-
-        loss = self.criterion(score, target)
-
-        return loss
+        self.loss_type = type
+        
+        if isinstance(self.loss_type, list):
+            assert len(self.loss_type) == 2, "Loss type list must have 2 elements for out_p and out_i"
+            self.criterion = [self._get_criterion(branch_loss_type, **kwargs) for branch_loss_type in self.loss_type]
+        else:
+            self.criterion = self._get_criterion(self.loss_type, **kwargs)
+    
+    def _get_criterion(self, loss_type, **kwargs):
+        match loss_type:
+            case SemanticLoss.CE.value:
+                criterion = nn.CrossEntropyLoss(
+                    weight=kwargs.get('class_weight'),
+                    ignore_index=self.ignore_label
+                )
+            case SemanticLoss.OHEM.value:
+                criterion = OHEMCrossEntropy(
+                    ignore_label=self.ignore_label,
+                    thres=kwargs.get('ohem_thres', 0.7),
+                    min_kept=kwargs.get('ohem_min_kept', 100000),
+                    weight=kwargs.get('class_weight')
+                )
+            case SemanticLoss.FOCAL.value:
+                criterion = FocalLoss(
+                    gamma=kwargs.get('focal_gamma'),
+                    alpha=kwargs.get('class_weight'),
+                    ignore_label=self.ignore_label
+                )
+            case _:
+                raise ValueError(f"Unsupported loss type: {self.loss_type}")
+        
+        return criterion
 
     def forward(self, score, target):
 
         # From original configs
         balance_weights = [0.4, 1.0]
         sb_weights = 1.0
+        
+        criterions = self.criterion if isinstance(self.criterion, list) else [self.criterion] * len(score)
 
         if len(balance_weights) == len(score):
-            return sum([w * self._forward(x, target) for (w, x) in zip(balance_weights, score)])
+            return sum([w * criterion(x, target) for (w, x, criterion) in zip(balance_weights, score, criterions)])
         if len(score) == 1:
-            return sb_weights * self._forward(score[0], target)
+            criterion_i = criterions[-1]
+            return sb_weights * criterion_i(score[0], target)
         
         raise ValueError("Lengths of prediction and target are not identical")
 
