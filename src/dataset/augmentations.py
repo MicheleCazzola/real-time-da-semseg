@@ -1,20 +1,21 @@
 import albumentations as A
 
+def get_nop_augmentation():
+    return A.Compose([], p=1)
 
+def get_augmentations(aug_prob, aug_params):
 
-def get_augmentations(resize, aug_prob, aug_indices):
+    augmentations = {
+        "AFF": A.Affine(p=1, **aug_params.get("AFF", {})),
+        "GD": A.GridDistortion(p=1, **aug_params.get("GD", {})),
+        "RC": A.RandomCrop(p=1, **aug_params.get("RC", {"height": 512, "width": 512})),
+        "HF": A.HorizontalFlip(p=1, **aug_params.get("HF", {})),
+        "GB": A.GaussianBlur(p=1, **aug_params.get("GB", {})),
+        "GDO": A.GridDropout(p=1, **aug_params.get("GDO", {})),
+        "CJ": A.ColorJitter(p=1, **aug_params.get("CJ", {})),
+        "GN": A.GaussNoise(p=1, **aug_params.get("GN", {})),
+        "CD": A.ChannelDropout(p=1, **aug_params.get("CD", {})),
+        "RSC": A.RandomSizedCrop(p=1, **aug_params.get("RSC", {"min_max_height": (128, 1024), "size": (512, 512)})),
+    }
 
-    augmentations = [
-        A.ShiftScaleRotate(p=1),
-        A.GridDistortion(p=1),
-        A.RandomCrop(height=resize, width=resize, p=1),
-        A.HorizontalFlip(p=1),
-        A.GaussianBlur(p=1),
-        A.GridDropout(p=1),
-        A.ColorJitter(p=1),
-        A.GaussNoise(var_limit=(0.2, 0.3), p=1),
-        A.ChannelDropout(p=1),
-        A.RandomSizedCrop(min_max_height=(resize//8, resize), height=resize, width=resize, p=1),
-    ]
-
-    return A.Compose([augmentations[i] for i in aug_indices], p=aug_prob)
+    return A.Compose([augmentations[name] for name in aug_params if name in augmentations], p=aug_prob)

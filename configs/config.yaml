@@ -21,6 +21,11 @@ data:
     height: 512
     width: 512
   augment: false
+  aug_prob: 1
+  aug_names:
+    RC:
+      height: 512
+      width: 512
 
 model:
   model: "bisenet_v1_rt"

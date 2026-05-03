@@ -105,10 +105,10 @@ class LoveDA(VisionDataset):
         mask = np.array(mask)
 
         if self.transforms is not None:
-          data = self.transforms(image=image, mask=mask)
-          image = data['image']
-          mask = data['mask']
-
+            data = self.transforms(image=image, mask=mask)
+            image = data['image']
+            mask = data['mask']
+          
         # Map classes in [1-7] to [0-6] and ignored from 0 to -1
         mask = mask.long() - 1
 

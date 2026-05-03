@@ -7,7 +7,7 @@ from datetime import datetime
 import argparse
 
 from src.dataset.dataset import LoveDA
-from src.dataset.augmentations import get_augmentations
+from src.dataset.augmentations import get_augmentations, get_nop_augmentation
 from src.metrics.metrics import compute_performance_metrics
 from src.train.train_rt_model import train_rt_model, setup_rt_model
 from src.utils.plot import plot_class_distribution, plot_results
@@ -73,16 +73,22 @@ if __name__ == "__main__":
     # Load dataset and dataloaders
     id2label = LoveDA.id2label.values()
     
+    # Load augmentations
+    if cfg.data.augment:
+        augmentations = get_augmentations(cfg.data.aug_prob, cfg.data.aug_names)
+    else:
+        augmentations = get_nop_augmentation()
+    
     match cfg.model.model:
         
         case ModelType.DEEPLAB_V2.value:
             model, criterion, optimizer, scheduler = deeplab_v2_model_setup(cfg, device)
                 
             if cfg.training.train:
-                trainset_source, trainloader_source = trainset_setup(cfg, cfg.path.source, g, seed_worker, num_workers, reduce_factor=args.reduce_factor)
-                trainset_target, trainloader_target = trainset_setup(cfg, cfg.path.target, g, seed_worker, num_workers, reduce_factor=args.reduce_factor)
-                validset, validloader = validset_setup(cfg, cfg.path.target, num_workers, g, seed_worker, reduce_factor=args.reduce_factor)
-                
+                trainset_source, trainloader_source = trainset_setup(cfg, cfg.path.source, g, seed_worker, num_workers, augmentations=augmentations)
+                trainset_target, trainloader_target = trainset_setup(cfg, cfg.path.target, g, seed_worker, num_workers, augmentations=augmentations)
+                validset, validloader = validset_setup(cfg, cfg.path.target, num_workers, g, seed_worker)
+
                 chp_path = os.path.join(output_dir, cfg.model.checkpoint) if cfg.model.checkpoint else None
                 new_chp_path = os.path.join(output_dir, f"{cfg.model.model}.pth.tar")
                 
@@ -120,10 +126,10 @@ if __name__ == "__main__":
         case ModelType.PIDNET_S.value | ModelType.PIDNET_M.value | ModelType.PIDNET_L.value:
             model, criterion, optimizer, scheduler = setup_rt_model(cfg, device)
             if cfg.training.train:
-                trainset_source, trainloader_source = trainset_setup(cfg, cfg.path.source, g, seed_worker, num_workers, reduce_factor=args.reduce_factor, boundaries=True)
-                trainset_target, trainloader_target = trainset_setup(cfg, cfg.path.target, g, seed_worker, num_workers, reduce_factor=args.reduce_factor, boundaries=True)
+                trainset_source, trainloader_source = trainset_setup(cfg, cfg.path.source, g, seed_worker, num_workers, augmentations=augmentations, reduce_factor=args.reduce_factor, boundaries=True)
+                trainset_target, trainloader_target = trainset_setup(cfg, cfg.path.target, g, seed_worker, num_workers, augmentations=augmentations, reduce_factor=args.reduce_factor, boundaries=True)
                 validset, validloader = validset_setup(cfg, cfg.path.target, num_workers, g, seed_worker, reduce_factor=args.reduce_factor, boundaries=True)
-                
+
                 train_result = train_rt_model(
                     model, cfg.model.model, cfg.model.num_classes, trainloader_source, validloader,
                     criterion, optimizer, scheduler, cfg.training.epochs, bd_required=True, 
@@ -159,8 +165,8 @@ if __name__ == "__main__":
             model, criterion, optimizer, scheduler = setup_rt_model(cfg, device, backbone_name)
                 
             if cfg.training.train:
-                trainset_source, trainloader_source = trainset_setup(cfg, cfg.path.source, g, seed_worker, num_workers, reduce_factor=args.reduce_factor, boundaries=False)
-                trainset_target, trainloader_target = trainset_setup(cfg, cfg.path.target, g, seed_worker, num_workers, reduce_factor=args.reduce_factor, boundaries=False)
+                trainset_source, trainloader_source = trainset_setup(cfg, cfg.path.source, g, seed_worker, num_workers, augmentations=augmentations, reduce_factor=args.reduce_factor, boundaries=False)
+                trainset_target, trainloader_target = trainset_setup(cfg, cfg.path.target, g, seed_worker, num_workers, augmentations=augmentations, reduce_factor=args.reduce_factor, boundaries=False)
                 validset, validloader = validset_setup(cfg, cfg.path.target, num_workers, g, seed_worker, reduce_factor=args.reduce_factor, boundaries=False)
                 
                 train_result = train_rt_model(
@@ -198,8 +204,8 @@ if __name__ == "__main__":
             model, criterion, optimizer, scheduler = setup_rt_model(cfg, device, backbone_name)
                 
             if cfg.training.train:
-                trainset_source, trainloader_source = trainset_setup(cfg, cfg.path.source, g, seed_worker, num_workers, reduce_factor=args.reduce_factor, boundaries=False)
-                trainset_target, trainloader_target = trainset_setup(cfg, cfg.path.target, g, seed_worker, num_workers, reduce_factor=args.reduce_factor, boundaries=False)
+                trainset_source, trainloader_source = trainset_setup(cfg, cfg.path.source, g, seed_worker, num_workers, augmentations=augmentations, reduce_factor=args.reduce_factor, boundaries=False)
+                trainset_target, trainloader_target = trainset_setup(cfg, cfg.path.target, g, seed_worker, num_workers, augmentations=augmentations, reduce_factor=args.reduce_factor, boundaries=False)
                 validset, validloader = validset_setup(cfg, cfg.path.target, num_workers, g, seed_worker, reduce_factor=args.reduce_factor, boundaries=False)
                 
                 train_result = train_rt_model(
