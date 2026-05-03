@@ -22,7 +22,7 @@ from src.utils.utils import save_checkpoint
 def setup_rt_model(cfg, device, backbone_name=None):
     model_name = cfg.model.model.lower()
     
-    # 1. Base criterion setup
+    # Semantic criterion setup
     sem_kwargs = {}
     weight_key = "class_weight" if hasattr(cfg.training, "class_weight") else "loss_weights"
     if hasattr(cfg.training, weight_key):
@@ -172,11 +172,9 @@ def train_rt_model(model, model_name, num_classes, trainloader, validloader, cri
             if bd_required:
                 inputs, gt = batch[0], batch[1:]
                 masks = gt[0]
-                target_for_loss = (masks, gt[1]) if "pidnet" in model_name.lower() else masks
             else:
                 inputs, gt = batch[0], batch[1]
                 masks = gt
-                target_for_loss = (masks, None) if "pidnet" in model_name.lower() else masks
             
             data_len += inputs.size(0)
 
@@ -185,9 +183,9 @@ def train_rt_model(model, model_name, num_classes, trainloader, validloader, cri
             outputs = model(inputs)
             
             # Loss unpacking
-            loss, batch_task_specific_losses = criterion(outputs, target_for_loss)
+            batch_loss, batch_task_specific_losses = criterion(outputs, gt)
             
-            train_loss += loss.item() * inputs.size(0)
+            train_loss += batch_loss.item() * inputs.size(0)
             
             for task, task_loss in batch_task_specific_losses.items():
                 if task not in epoch_task_specific_losses:
@@ -195,18 +193,18 @@ def train_rt_model(model, model_name, num_classes, trainloader, validloader, cri
                 epoch_task_specific_losses[task] += task_loss.item() * inputs.size(0)
 
             # Backward pass
-            loss.backward()
+            batch_loss.backward()
             optimizer.step()
             
             # Predictions Extraction
             if "pidnet" in model_name.lower():
-                pred = outputs[1] if isinstance(outputs, (list, tuple)) else outputs
+                preds = outputs[1] if isinstance(outputs, (list, tuple)) else outputs
             elif isinstance(outputs, (list, tuple)):
-                pred = outputs[0]
+                preds = outputs[0]
             else:
-                pred = outputs
+                preds = outputs
                 
-            batch_miou, batch_ious = compute_iou(pred, masks, num_classes)
+            batch_miou, batch_ious = compute_iou(preds, masks, num_classes)
             train_epoch_miou += batch_miou.item() * inputs.size(0)
             train_epoch_ious += batch_ious.cpu() * inputs.size(0)
 
@@ -214,19 +212,19 @@ def train_rt_model(model, model_name, num_classes, trainloader, validloader, cri
                 inner_losses_str = " | ".join([f"{k}: {v / data_len:.4f}" for k, v in epoch_task_specific_losses.items()])
                 logging.info(f"Epoch {epoch + 1}/{num_epochs} | Batch {i + 1}/{tot_batches} | Total Loss: {train_loss / data_len:.4f} | {inner_losses_str} | mIoU (%): {100 * train_epoch_miou / data_len:.2f}")
 
-        # Metrics aggregation
+        # Loss aggregation
         train_loss = train_loss / data_len
         for task, task_loss in epoch_task_specific_losses.items():
             epoch_task_specific_losses[task] = task_loss / data_len
             if f"train_losses_{task}" not in train_task_specific_losses:
                 train_task_specific_losses[f"train_losses_{task}"] = []
                 
+        # mIoU and IoU aggregation
         train_epoch_miou = 100 * train_epoch_miou / data_len
         train_epoch_ious = 100 * train_epoch_ious / data_len
 
         val_loss, val_epoch_miou, val_epoch_ious = evaluate_rt_model(model, model_name, num_classes, validloader, criterion, bd_required, epoch, num_epochs, device, log_frequency)
-
-        # Logging
+        
         train_losses.append(float(train_loss))
         val_losses.append(float(val_loss))
         for task, task_loss in epoch_task_specific_losses.items():
@@ -236,6 +234,7 @@ def train_rt_model(model, model_name, num_classes, trainloader, validloader, cri
         train_ious.append(train_epoch_ious.tolist())
         val_ious.append(val_epoch_ious.tolist())
         
+        # Logging
         logging.info(f"Epoch {epoch + 1}/{num_epochs} | Train Loss: {train_loss:.4f} | Train mIoU (%): {train_epoch_miou:.2f} | Val Loss: {val_loss:.4f} | Val mIoU (%): {val_epoch_miou:.2f}")
         
         # Checkpointing
@@ -244,7 +243,7 @@ def train_rt_model(model, model_name, num_classes, trainloader, validloader, cri
             best_val_miou = val_epoch_miou
             best_epoch = epoch
             chp_path = os.path.join(checkpoint_dir, f"best_{model_name}_{epoch + 1}.pth.tar")
-            save_checkpoint(chp_path, epoch, model, optimizer, scheduler, val_epoch_miou, val_epoch_ious)
+            save_checkpoint(chp_path, epoch, model, optimizer=optimizer, scheduler=scheduler, miou=val_epoch_miou, ious=val_epoch_ious)
             
             if prev_best_epoch is not None:
                 prev_chp_path = os.path.join(checkpoint_dir, f"best_{model_name}_{prev_best_epoch + 1}.pth.tar")
@@ -255,7 +254,7 @@ def train_rt_model(model, model_name, num_classes, trainloader, validloader, cri
             scheduler.step()
             
     last_chp_path = os.path.join(checkpoint_dir, f"last_{model_name}_{num_epochs}.pth.tar")
-    save_checkpoint(last_chp_path, epoch, model, optimizer, scheduler, val_epoch_miou, val_epoch_ious)
+    save_checkpoint(last_chp_path, epoch, model, optimizer=optimizer, scheduler=scheduler, miou=val_epoch_miou, ious=val_epoch_ious)
     
     return {
         "train_losses": train_losses,

@@ -35,7 +35,7 @@ class SemanticLoss(str, Enum):
         return self.value
     
     def values():
-        return [SemanticLoss.CE, SemanticLoss.OHEM, SemanticLoss.FOCAL]
+        return [SemanticLoss.CE.value, SemanticLoss.OHEM.value, SemanticLoss.FOCAL.value]
 
 class Domain(str, Enum):
     RURAL = "Rural"
@@ -45,7 +45,7 @@ class Domain(str, Enum):
         return self.value
     
     def values():
-        return [Domain.RURAL, Domain.URBAN]
+        return [Domain.RURAL.value, Domain.URBAN.value]
 
 class ModelType(str, Enum):
     DEEPLAB_V2 = "deeplab_v2"
@@ -62,8 +62,8 @@ class ModelType(str, Enum):
     
     def values():
         return [
-            ModelType.DEEPLAB_V2, ModelType.PIDNET_S, ModelType.PIDNET_M, ModelType.PIDNET_L,
-            ModelType.BISENET_V1, ModelType.BISENET_V1_RT, ModelType.STDC1, ModelType.STDC2
+            ModelType.DEEPLAB_V2.value, ModelType.PIDNET_S.value, ModelType.PIDNET_M.value, ModelType.PIDNET_L.value,
+            ModelType.BISENET_V1.value, ModelType.BISENET_V1_RT.value, ModelType.STDC1.value, ModelType.STDC2.value
         ]
         
 class AdaptationMethod(str, Enum):
@@ -74,7 +74,7 @@ class AdaptationMethod(str, Enum):
         return self.value
     
     def values():
-        return [AdaptationMethod.ADDA, AdaptationMethod.DACS]
+        return [AdaptationMethod.ADDA.value, AdaptationMethod.DACS.value]
 
 categories = {
     'BARREN': (0.003921568859368563, (159, 129, 183)),       # Lilla

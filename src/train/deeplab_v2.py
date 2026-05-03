@@ -15,8 +15,8 @@ def deeplab_v2_model_setup(cfg, device):
         num_classes=cfg.model.num_classes, pretrain=True, pretrain_model_path=pretrained_model_path
     ).to(device)
 
-    optimizer = optim.Adam(model.parameters(), lr=cfg.training.learning_rate, weight_decay=cfg.training.weight_decay)
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=cfg.training.step_size, gamma=cfg.training.gamma)
+    optimizer = optim.AdamW(model.parameters(), lr=cfg.training.learning_rate, weight_decay=cfg.training.weight_decay)
+    scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda epoch: cfg.training.gamma ** (epoch // cfg.training.step_size))
 
     # Define loss function and optimizer
     criterion = nn.CrossEntropyLoss(ignore_index=cfg.model.ignore_index)
@@ -78,7 +78,7 @@ def train_deeplab_v2(model, num_classes, trainloader, num_epochs, criterion, opt
         logging.info(f"Epoch {epoch + 1}/{end_epoch} | Loss: {epoch_loss:.4f} | mIoU (%): {epoch_miou:.2f}%")
         
         chp_name = f"{new_chp_path.split('.pth.tar')[0]}_{epoch + 1}.pth.tar"
-        save_checkpoint(chp_name, epoch, model, optimizer, scheduler)
+        save_checkpoint(chp_name, epoch, model, optimizer=optimizer, scheduler=scheduler)
 
         if scheduler is not None:
             scheduler.step()
@@ -141,7 +141,7 @@ def evaluate_deeplab_v2(model, dataloader, criterion, num_classes, device, chp_p
         if best_miou is None or epoch_miou > best_miou:
             best_miou = epoch_miou
             best_chp_path = f"{chp_path.split('.pth.tar')[0]}_best.pth.tar"
-            save_checkpoint(best_chp_path, epoch, model, None, None, epoch_miou, epoch_ious)
+            save_checkpoint(best_chp_path, epoch, model, optimizer=None, scheduler=None, miou=epoch_miou, ious=epoch_ious)
             logging.info(f"New best mIoU: {best_miou:.2f}% | Best checkpoint saved at: {best_chp_path}")
         
     return losses, mious, ious

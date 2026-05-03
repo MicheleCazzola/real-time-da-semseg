@@ -71,15 +71,21 @@ def resume_checkpoint(resume_path, model, optimizer=None, scheduler=None):
     return epoch, model, optimizer, scheduler
 
 # Checkpoint save
-def save_checkpoint(path, epoch, model, optimizer=None, scheduler=None, miou=None, ious=None):
+def save_checkpoint(path, epoch, model, disc_model=None, optimizer=None, disc_optimizer=None, scheduler=None, disc_scheduler=None, miou=None, ious=None):
     checkpoint = {
         'epoch': epoch,
         'model': model.state_dict()
     }
+    if disc_model is not None:
+        checkpoint['disc_model'] = disc_model.state_dict()
     if optimizer is not None:
         checkpoint['optimizer'] = optimizer.state_dict()
+    if disc_optimizer is not None:
+        checkpoint['disc_optimizer'] = disc_optimizer.state_dict()
     if scheduler is not None:
         checkpoint['scheduler'] = scheduler.state_dict()
+    if disc_scheduler is not None:
+        checkpoint['disc_scheduler'] = disc_scheduler.state_dict()
     if miou is not None:
         checkpoint['miou'] = float(miou)
     if ious is not None:
