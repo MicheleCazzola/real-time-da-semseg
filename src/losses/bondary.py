@@ -15,8 +15,11 @@ def weighted_bce(bd_pre, target):
     neg_num = neg_index.float().sum()
     sum_num = pos_num + neg_num
     
-    weight[pos_index] = neg_num / sum_num
-    weight[neg_index] = pos_num / sum_num
+    pos_weight = neg_num / (sum_num + 1e-6)
+    neg_weight = pos_num / (sum_num + 1e-6)
+    
+    weight = torch.where(pos_index, pos_weight, weight)
+    weight = torch.where(neg_index, neg_weight, weight)
 
     loss = F.binary_cross_entropy_with_logits(log_p, target_t, weight=weight, reduction='mean')
 

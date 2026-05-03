@@ -88,14 +88,16 @@ class PIDNetLoss(nn.Module):
         self.bd_loss = bd_loss
         self.ignore_index = ignore_index
 
-    def forward(self, outputs, labels, bd_gt):
+    def forward(self, outputs, ground_truth):
         
-        assert labels is not None, "Labels must be provided for loss computation."
+        assert ground_truth is not None and len(ground_truth) == 2, "Ground truth must be provided for loss computation."
+        
+        masks, bd_gt = ground_truth
         
         # Resize outputs to match labels if necessary
         for i in range(len(outputs)):
             pw, ph = outputs[i].size(3), outputs[i].size(2)
-            w, h = labels.size(2), labels.size(1)
+            w, h = masks.size(2), masks.size(1)
             if pw != w or ph != h:
                 outputs[i] = F.interpolate(
                     outputs[i], size=(h, w), mode='bilinear', align_corners=True
@@ -103,23 +105,29 @@ class PIDNetLoss(nn.Module):
 
         # Generate boundary ground truth if not provided (semi-supervised setting)
         if bd_gt is None:
-            bd_gt = np.zeros_like(labels.cpu().numpy(), dtype=np.float32)
-            for i, m in enumerate(labels):
+            bd_gt = np.zeros_like(masks.cpu().numpy(), dtype=np.float32)
+            for i, m in enumerate(masks):
                 bd_gt[i] = generate_bd(m.cpu().numpy().astype(np.uint8))
 
-            bd_gt = torch.from_numpy(bd_gt).to(labels.device)
+            bd_gt = torch.from_numpy(bd_gt).to(masks.device)
             
         out_p, out_i, out_d = tuple(outputs)
     
         # Semantic loss
-        loss_s = self.sem_loss([out_p, out_i], labels)
+        loss_s = self.sem_loss([out_p, out_i], masks)
         
         # Boundary loss
         loss_b = self.bd_loss(out_d, bd_gt)
         
         # BAS loss
-        filler = torch.ones_like(labels) * self.ignore_index
-        bd_label = torch.where(F.sigmoid(out_d[:,0,:,:]) > 0.8, labels, filler)
+        filler = torch.ones_like(masks) * self.ignore_index
+        bd_label = torch.where(F.sigmoid(out_d[:,0,:,:]) > 0.8, masks, filler)
         loss_sb = self.sem_loss([out_i], bd_label)
 
-        return loss_s, loss_b, loss_sb
+        loss = loss_s + loss_b + loss_sb
+        
+        return loss, {
+            "semantic": loss_s,
+            "boundary": loss_b,
+            "bas": loss_sb
+        }

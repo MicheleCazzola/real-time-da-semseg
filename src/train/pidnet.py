@@ -122,9 +122,8 @@ def evaluate_pidnet(model, num_classes, dataloader, criterion, epoch, tot_epochs
         boundaries = boundaries.to(device)
 
         # Forward pass
-        #loss, outputs, _, [loss_s, loss_b, loss_sb] = model(inputs, masks, boundaries)
         outputs = model(inputs)
-        loss_s, loss_b, loss_sb = criterion(outputs, masks, boundaries)
+        loss_s, loss_b, loss_sb = criterion(outputs, (masks, boundaries))
         loss = loss_s + loss_b + loss_sb
         
         tot_loss += loss.item() * inputs.size(0)
@@ -172,10 +171,13 @@ def train_pidnet(model, num_classes, trainloader, validloader, criterion, optimi
 
             # Forward pass
             optimizer.zero_grad()
-            #loss, outputs, _, [loss_s, loss_b, loss_sb] = model(inputs, masks, boundaries)
+            
             outputs = model(inputs)
-            loss_s, loss_b, loss_sb = criterion(outputs, masks, boundaries)
+            loss_s, loss_b, loss_sb = criterion(outputs, (masks, boundaries))
             loss = loss_s + loss_b + loss_sb
+            
+            if device.type == 'mps':
+                torch.mps.synchronize()  # Debug
             
             train_loss += loss.item() * inputs.size(0)
             train_loss_s += loss_s.item() * inputs.size(0)

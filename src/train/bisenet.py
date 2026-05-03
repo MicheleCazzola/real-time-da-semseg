@@ -121,7 +121,9 @@ def train_bisenet(model, num_classes, trainloader, validloader, optimizer, sched
             loss1 = criterion(outputs, masks)
             loss2 = criterion(outputs16, masks)
             loss3 = criterion(outputs32, masks)
+            
             loss = loss1 + loss2 + loss3
+            
             train_loss += loss.item() * inputs.size(0)
             train_loss_sem += loss1.item() * inputs.size(0)
             train_loss_aux16 += loss2.item() * inputs.size(0)

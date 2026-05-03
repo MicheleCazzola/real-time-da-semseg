@@ -38,8 +38,8 @@ class SemanticLoss(str, Enum):
         return [SemanticLoss.CE, SemanticLoss.OHEM, SemanticLoss.FOCAL]
 
 class Domain(str, Enum):
-    RURAL = "rural"
-    URBAN = "urban"
+    RURAL = "Rural"
+    URBAN = "Urban"
     
     def __str__(self):
         return self.value

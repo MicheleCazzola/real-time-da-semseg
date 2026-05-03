@@ -8,86 +8,10 @@ from torch.optim import lr_scheduler
 
 from src.losses.focal import FocalLoss
 from src.losses.ohem import OHEMCrossEntropy
+from src.losses.stdc import DetailAggregateLoss
 from src.metrics.metrics import compute_iou
 from src.models.stdc import STDC
 from src.utils.utils import save_checkpoint
-
-class DetailAggregateLoss(nn.Module):
-    def __init__(self, *args, **kwargs):
-        super(DetailAggregateLoss, self).__init__()
-        
-        self.laplacian_kernel = torch.tensor(
-            [-1, -1, -1, -1, 8, -1, -1, -1, -1],
-            dtype=torch.float32
-        ).reshape(1, 1, 3, 3).requires_grad_(False).type(torch.FloatTensor)
-        
-        self.fuse_kernel = torch.nn.Parameter(
-            torch.tensor([[6./10], [3./10], [1./10]],
-            dtype=torch.float32
-        ).reshape(1, 3, 1, 1).type(torch.FloatTensor))
-        
-    def dice_loss(self, input, target):
-        smooth = 1.0
-        n = input.size(0)
-        iflat = input.view(n, -1)
-        tflat = target.view(n, -1)
-        
-        intersection = (iflat * tflat).sum(1)
-        loss = 1 - ((
-            2. * intersection + smooth) /
-            (iflat.sum(1) + tflat.sum(1) + smooth
-        ))
-        
-        return loss.mean()
-
-    def forward(self, boundary_logits, gtmasks):
-
-        # boundary_logits = boundary_logits.unsqueeze(1)
-        boundary_targets = F.conv2d(gtmasks.unsqueeze(1).type(torch.FloatTensor), self.laplacian_kernel, padding=1)
-        boundary_targets = boundary_targets.clamp(min=0)
-        boundary_targets[boundary_targets > 0.1] = 1
-        boundary_targets[boundary_targets <= 0.1] = 0
-
-        boundary_targets_x2 = F.conv2d(gtmasks.unsqueeze(1).type(torch.FloatTensor), self.laplacian_kernel, stride=2, padding=1)
-        boundary_targets_x2 = boundary_targets_x2.clamp(min=0)
-        
-        boundary_targets_x4 = F.conv2d(gtmasks.unsqueeze(1).type(torch.FloatTensor), self.laplacian_kernel, stride=4, padding=1)
-        boundary_targets_x4 = boundary_targets_x4.clamp(min=0)
-
-        boundary_targets_x8 = F.conv2d(gtmasks.unsqueeze(1).type(torch.FloatTensor), self.laplacian_kernel, stride=8, padding=1)
-        boundary_targets_x8 = boundary_targets_x8.clamp(min=0)
-    
-        boundary_targets_x8_up = F.interpolate(boundary_targets_x8, boundary_targets.shape[2:], mode='nearest')
-        boundary_targets_x4_up = F.interpolate(boundary_targets_x4, boundary_targets.shape[2:], mode='nearest')
-        boundary_targets_x2_up = F.interpolate(boundary_targets_x2, boundary_targets.shape[2:], mode='nearest')
-        
-        boundary_targets_x2_up[boundary_targets_x2_up > 0.1] = 1
-        boundary_targets_x2_up[boundary_targets_x2_up <= 0.1] = 0
-        
-        boundary_targets_x4_up[boundary_targets_x4_up > 0.1] = 1
-        boundary_targets_x4_up[boundary_targets_x4_up <= 0.1] = 0
-        
-        boundary_targets_x8_up[boundary_targets_x8_up > 0.1] = 1
-        boundary_targets_x8_up[boundary_targets_x8_up <= 0.1] = 0
-        
-        boundary_targets_pyramids = torch.stack((boundary_targets, boundary_targets_x2_up, boundary_targets_x4_up), dim=1)
-        
-        boundary_targets_pyramids = boundary_targets_pyramids.squeeze(2)
-        boundary_targets_pyramid = F.conv2d(boundary_targets_pyramids, self.fuse_kernel)
-
-        boundary_targets_pyramid[boundary_targets_pyramid > 0.1] = 1
-        boundary_targets_pyramid[boundary_targets_pyramid <= 0.1] = 0
-        
-        if boundary_logits.shape[-1] != boundary_targets.shape[-1]:
-            boundary_logits = F.interpolate(
-                boundary_logits, boundary_targets.shape[2:], mode='bilinear', align_corners=True
-            )
-        
-        boundary_targets_pyramid = boundary_targets_pyramid.to(boundary_logits.device)
-        bce_loss = F.binary_cross_entropy_with_logits(boundary_logits, boundary_targets_pyramid)
-        dice_loss = self.dice_loss(torch.sigmoid(boundary_logits), boundary_targets_pyramid)
-        
-        return bce_loss, dice_loss
 
 def stdc_model_setup(cfg, backbone_name, device):
     pretrained_model = os.path.join(cfg.path.weights, f"{cfg.model.model}.pth")

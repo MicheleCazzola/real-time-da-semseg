@@ -9,16 +9,14 @@ import argparse
 from src.dataset.dataset import LoveDA
 from src.dataset.augmentations import get_augmentations
 from src.metrics.metrics import compute_performance_metrics
+from src.train.train_rt_model import train_rt_model, setup_rt_model
 from src.utils.plot import plot_class_distribution, plot_results
 from src.utils.utils import load_model_weights, set_default_config, set_seed, get_num_workers, setup_logger, get_device, save_results
 from src.utils.variables import ModelType, Domain, AdaptationMethod, urban_percentage, rural_percentage
 from src.train.utils import trainset_setup, validset_setup
 from src.train.deeplab_v2 import deeplab_v2_model_setup, train_deeplab_v2, evaluate_deeplab_v2
-from src.train.pidnet import pidnet_model_setup, train_pidnet
 from src.train.adda import adda_setup, train_adda
 from src.train.dacs import dacs_setup, train_dacs
-from src.train.bisenet import bisenet_model_setup, train_bisenet
-from src.train.stdc import stdc_model_setup, train_stdc
 
 
 
@@ -27,8 +25,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a semantic segmentation model on urban and rural datasets.')
     parser.add_argument('--from-config', type=str, default=os.path.join('configs', 'config.yaml'), help='Path to the YAML configuration file.')
     parser.add_argument('--model', type=str, choices=ModelType.values(), help='The model architecture to use for training.')
-    parser.add_argument('--source', type=str, default=Domain.URBAN, choices=Domain.values(), help='The source domain for training.')
-    parser.add_argument('--target', type=str, default=Domain.RURAL, choices=Domain.values(), help='The target domain for training.')
+    parser.add_argument('--source', type=str, choices=Domain.values(), help='The source domain for training.')
+    parser.add_argument('--target', type=str, choices=Domain.values(), help='The target domain for training.')
     parser.add_argument('--augment', action='store_true', help='Flag to indicate whether to apply data augmentation during training.')
     parser.add_argument('--adaptation', type=str, choices=AdaptationMethod.values(), help='The domain adaptation method to use for training.')
     parser.add_argument('--train', action='store_true', help='Flag to indicate whether to train the model.')
@@ -120,15 +118,16 @@ if __name__ == "__main__":
                 )
 
         case ModelType.PIDNET_S.value | ModelType.PIDNET_M.value | ModelType.PIDNET_L.value:
-            model, criterion, optimizer, scheduler = pidnet_model_setup(cfg, device)
+            model, criterion, optimizer, scheduler = setup_rt_model(cfg, device)
             if cfg.training.train:
                 trainset_source, trainloader_source = trainset_setup(cfg, cfg.path.source, g, seed_worker, num_workers, reduce_factor=args.reduce_factor, boundaries=True)
                 trainset_target, trainloader_target = trainset_setup(cfg, cfg.path.target, g, seed_worker, num_workers, reduce_factor=args.reduce_factor, boundaries=True)
                 validset, validloader = validset_setup(cfg, cfg.path.target, num_workers, g, seed_worker, reduce_factor=args.reduce_factor, boundaries=True)
                 
-                train_result = train_pidnet(
-                    model, cfg.model.num_classes, trainloader_source, validloader, criterion, optimizer, scheduler,
-                    cfg.training.epochs, output_dir, device, log_frequency=10
+                train_result = train_rt_model(
+                    model, cfg.model.model, cfg.model.num_classes, trainloader_source, validloader,
+                    criterion, optimizer, scheduler, cfg.training.epochs, bd_required=True, 
+                    checkpoint_dir=output_dir, device=device, log_frequency=10
                 )
                 
                 save_results(
@@ -137,7 +136,7 @@ if __name__ == "__main__":
                 )
                 
                 train_specific_losses = {
-                    "detail":{k: v for k, v in train_result.items() if k.startswith("train_losses_")}
+                    "detail": {k: v for k, v in train_result.items() if k not in ["train_losses", "val_losses", "train_mious", "val_mious", "train_ious", "val_ious"]}
                 }
                 
                 plot_results(
@@ -157,16 +156,17 @@ if __name__ == "__main__":
 
         case ModelType.BISENET_V1.value | ModelType.BISENET_V1_RT.value:
             backbone_name = "resnet18" if cfg.model.model == ModelType.BISENET_V1_RT.value else "resnet101"
-            model, criterion, optimizer, scheduler = bisenet_model_setup(cfg, backbone_name, device)
+            model, criterion, optimizer, scheduler = setup_rt_model(cfg, device, backbone_name)
                 
             if cfg.training.train:
                 trainset_source, trainloader_source = trainset_setup(cfg, cfg.path.source, g, seed_worker, num_workers, reduce_factor=args.reduce_factor, boundaries=False)
                 trainset_target, trainloader_target = trainset_setup(cfg, cfg.path.target, g, seed_worker, num_workers, reduce_factor=args.reduce_factor, boundaries=False)
                 validset, validloader = validset_setup(cfg, cfg.path.target, num_workers, g, seed_worker, reduce_factor=args.reduce_factor, boundaries=False)
                 
-                train_result = train_bisenet(
-                    model, cfg.model.num_classes, trainloader_source, validloader, optimizer, scheduler, criterion,
-                    cfg.training.epochs, output_dir, device, log_frequency=10
+                train_result = train_rt_model(
+                    model, cfg.model.model, cfg.model.num_classes, trainloader_source, validloader,
+                    criterion, optimizer, scheduler, cfg.training.epochs, bd_required=False,
+                    checkpoint_dir=output_dir, device=device, log_frequency=10
                 )
                 
                 save_results(
@@ -175,7 +175,7 @@ if __name__ == "__main__":
                 )
                 
                 train_specific_losses = {
-                    "semantic": {k: v for k, v in train_result.items() if k.startswith("train_losses_sem")}
+                    "semantic": {k: v for k, v in train_result.items() if k not in ["train_losses", "val_losses", "train_mious", "val_mious", "train_ious", "val_ious"]}
                 }
                 
                 plot_results(
@@ -195,16 +195,17 @@ if __name__ == "__main__":
             
         case ModelType.STDC1.value | ModelType.STDC2.value:
             backbone_name = "STDCNet813" if cfg.model.model == ModelType.STDC1.value else "STDCNet1446"
-            model, criterion, detail_criterion, optimizer, scheduler = stdc_model_setup(cfg, backbone_name, device)
+            model, criterion, optimizer, scheduler = setup_rt_model(cfg, device, backbone_name)
                 
             if cfg.training.train:
                 trainset_source, trainloader_source = trainset_setup(cfg, cfg.path.source, g, seed_worker, num_workers, reduce_factor=args.reduce_factor, boundaries=False)
                 trainset_target, trainloader_target = trainset_setup(cfg, cfg.path.target, g, seed_worker, num_workers, reduce_factor=args.reduce_factor, boundaries=False)
                 validset, validloader = validset_setup(cfg, cfg.path.target, num_workers, g, seed_worker, reduce_factor=args.reduce_factor, boundaries=False)
                 
-                train_result = train_stdc(
-                    model, cfg.model.num_classes, trainloader_source, validloader, optimizer, scheduler, criterion, detail_criterion,
-                    cfg.training.epochs, output_dir, device, log_frequency=10
+                train_result = train_rt_model(
+                    model, cfg.model.model, cfg.model.num_classes, trainloader_source, validloader,
+                    criterion, optimizer, scheduler, cfg.training.epochs, bd_required=False,
+                    checkpoint_dir=output_dir, device=device, log_frequency=10
                 )
                 
                 save_results(
@@ -213,8 +214,8 @@ if __name__ == "__main__":
                 )
                 
                 train_specific_losses = {
-                    "semantic": {k: v for k, v in train_result.items() if k.startswith("train_losses_sem")},
-                    "boundary": {k: v for k, v in train_result.items() if k.startswith("train_losses_boundary")}
+                    "semantic": {k: v for k, v in train_result.items() if "sem" in k and k not in ["train_losses", "val_losses", "train_mious", "val_mious", "train_ious", "val_ious"]},
+                    "boundary": {k: v for k, v in train_result.items() if "boundary" in k}
                 }
                 
                 plot_results(
