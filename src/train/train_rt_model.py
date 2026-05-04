@@ -44,15 +44,17 @@ def setup_rt_model(cfg, device, backbone_name=None):
     # Model and loss initialization
     if "bisenet" in model_name:
         model = BiSeNet(cfg.model.num_classes, backbone_name)
+        param_groups = model.get_param_groups()
         criterion = BiSeNetLoss(base_criterion)
     elif "stdc" in model_name:
         pretrained_model = os.path.join(cfg.path.weights, f"{cfg.model.model}.pth")
         model = STDC(backbone_name, cfg.model.num_classes, pretrain_model=pretrained_model, use_boundary_8=True)
+        param_groups = model.get_param_groups()
         detail_criterion = DetailAggregateLoss()
         criterion = STDCLoss(sem_loss=base_criterion, bd_loss=detail_criterion)
     elif "pidnet" in model_name:
         pretrained_weights = os.path.join(cfg.path.weights, f"{cfg.model.model}.pth")
-        model = get_pidnet(cfg.model.model, cfg.model.num_classes, pretrained_weights, imgnet_pretrained=True)
+        model, param_groups = get_pidnet(cfg.model.model, cfg.model.num_classes, pretrained_weights, imgnet_pretrained=True)
         
         args = {}
         for k in ["class_weight", "focal_gamma", "ohem_thres", "ohem_min_kept"]:
@@ -66,17 +68,41 @@ def setup_rt_model(cfg, device, backbone_name=None):
         
     model = model.to(device)
     
-    # Optimizer setup
+    # Learning rate
     lr = cfg.training.learning_rate
+    if isinstance(lr, dict):
+        lr = lr[cfg.model.model]
+        
+    if isinstance(lr, (list, tuple)):
+        opt_param_groups = [{'params': group, 'lr': lr[i]} for i, group in enumerate(param_groups)]
+    else:
+        assert isinstance(lr, (float, int)), f"Learning rate must be a float, int, list, tuple, or dict. Found: {type(lr)}"
+        opt_param_groups = [{'params': group, 'lr': lr} for group in param_groups]
+        
+    # Weight decay
     wd = cfg.training.weight_decay
+    if isinstance(wd, dict):
+        wd = wd[cfg.model.model]
+        
+    if isinstance(wd, (list, tuple)):
+        for i in range(len(opt_param_groups)):
+            opt_param_groups[i]['weight_decay'] = wd[i]
+    else:
+        assert isinstance(wd, (float, int)), f"Weight decay must be a float, int, list, tuple, or dict. Found: {type(wd)}"
+        for i in range(len(opt_param_groups)):
+            opt_param_groups[i]['weight_decay'] = wd
+    
+    # Momentum
+    momentum = cfg.training.momentum if hasattr(cfg.training, "momentum") else 0
+    
+    # Optimizer setup
     match cfg.training.optimizer:
         case "SGD":
-            assert getattr(cfg.training, "momentum", None) is not None, "Momentum value must be provided for SGD"
-            optimizer = optim.SGD(model.parameters(), lr=lr, momentum=cfg.training.momentum, weight_decay=wd)
+            optimizer = optim.SGD(opt_param_groups, momentum=momentum)
         case "Adam":
-            optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
+            optimizer = optim.Adam(opt_param_groups)
         case "AdamW":
-            optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
+            optimizer = optim.AdamW(opt_param_groups)
         case _:
             raise ValueError(f"Unsupported optimizer: {cfg.training.optimizer}")
 

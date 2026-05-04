@@ -2,6 +2,7 @@
 STDC model definition
 From the original implementation: github.com/MichaelFan01/STDC-Seg
 """
+
 import logging
 import torch
 import torch.nn as nn
@@ -9,10 +10,11 @@ from torch.nn import init
 import torch.nn.functional as F
 import math
 
+
 class ConvX(nn.Module):
     def __init__(self, in_planes, out_planes, kernel=3, stride=1):
         super(ConvX, self).__init__()
-        self.conv = nn.Conv2d(in_planes, out_planes, kernel_size=kernel, stride=stride, padding=kernel//2, bias=False)
+        self.conv = nn.Conv2d(in_planes, out_planes, kernel_size=kernel, stride=stride, padding=kernel // 2, bias=False)
         self.bn = nn.BatchNorm2d(out_planes)
         self.relu = nn.ReLU(inplace=True)
 
@@ -29,8 +31,16 @@ class AddBottleneck(nn.Module):
         self.stride = stride
         if stride == 2:
             self.avd_layer = nn.Sequential(
-                nn.Conv2d(out_planes//2, out_planes//2, kernel_size=3, stride=2, padding=1, groups=out_planes//2, bias=False),
-                nn.BatchNorm2d(out_planes//2),
+                nn.Conv2d(
+                    out_planes // 2,
+                    out_planes // 2,
+                    kernel_size=3,
+                    stride=2,
+                    padding=1,
+                    groups=out_planes // 2,
+                    bias=False,
+                ),
+                nn.BatchNorm2d(out_planes // 2),
             )
             self.skip = nn.Sequential(
                 nn.Conv2d(in_planes, in_planes, kernel_size=3, stride=2, padding=1, groups=in_planes, bias=False),
@@ -42,15 +52,17 @@ class AddBottleneck(nn.Module):
 
         for idx in range(block_num):
             if idx == 0:
-                self.conv_list.append(ConvX(in_planes, out_planes//2, kernel=1))
+                self.conv_list.append(ConvX(in_planes, out_planes // 2, kernel=1))
             elif idx == 1 and block_num == 2:
-                self.conv_list.append(ConvX(out_planes//2, out_planes//2, stride=stride))
+                self.conv_list.append(ConvX(out_planes // 2, out_planes // 2, stride=stride))
             elif idx == 1 and block_num > 2:
-                self.conv_list.append(ConvX(out_planes//2, out_planes//4, stride=stride))
+                self.conv_list.append(ConvX(out_planes // 2, out_planes // 4, stride=stride))
             elif idx < block_num - 1:
-                self.conv_list.append(ConvX(out_planes//int(math.pow(2, idx)), out_planes//int(math.pow(2, idx+1))))
+                self.conv_list.append(
+                    ConvX(out_planes // int(math.pow(2, idx)), out_planes // int(math.pow(2, idx + 1)))
+                )
             else:
-                self.conv_list.append(ConvX(out_planes//int(math.pow(2, idx)), out_planes//int(math.pow(2, idx))))
+                self.conv_list.append(ConvX(out_planes // int(math.pow(2, idx)), out_planes // int(math.pow(2, idx))))
 
     def forward(self, x):
         out_list = []
@@ -69,7 +81,6 @@ class AddBottleneck(nn.Module):
         return torch.cat(out_list, dim=1) + x
 
 
-
 class CatBottleneck(nn.Module):
     def __init__(self, in_planes, out_planes, block_num=3, stride=1):
         super(CatBottleneck, self).__init__()
@@ -78,23 +89,33 @@ class CatBottleneck(nn.Module):
         self.stride = stride
         if stride == 2:
             self.avd_layer = nn.Sequential(
-                nn.Conv2d(out_planes//2, out_planes//2, kernel_size=3, stride=2, padding=1, groups=out_planes//2, bias=False),
-                nn.BatchNorm2d(out_planes//2),
+                nn.Conv2d(
+                    out_planes // 2,
+                    out_planes // 2,
+                    kernel_size=3,
+                    stride=2,
+                    padding=1,
+                    groups=out_planes // 2,
+                    bias=False,
+                ),
+                nn.BatchNorm2d(out_planes // 2),
             )
             self.skip = nn.AvgPool2d(kernel_size=3, stride=2, padding=1)
             stride = 1
 
         for idx in range(block_num):
             if idx == 0:
-                self.conv_list.append(ConvX(in_planes, out_planes//2, kernel=1))
+                self.conv_list.append(ConvX(in_planes, out_planes // 2, kernel=1))
             elif idx == 1 and block_num == 2:
-                self.conv_list.append(ConvX(out_planes//2, out_planes//2, stride=stride))
+                self.conv_list.append(ConvX(out_planes // 2, out_planes // 2, stride=stride))
             elif idx == 1 and block_num > 2:
-                self.conv_list.append(ConvX(out_planes//2, out_planes//4, stride=stride))
+                self.conv_list.append(ConvX(out_planes // 2, out_planes // 4, stride=stride))
             elif idx < block_num - 1:
-                self.conv_list.append(ConvX(out_planes//int(math.pow(2, idx)), out_planes//int(math.pow(2, idx+1))))
+                self.conv_list.append(
+                    ConvX(out_planes // int(math.pow(2, idx)), out_planes // int(math.pow(2, idx + 1)))
+                )
             else:
-                self.conv_list.append(ConvX(out_planes//int(math.pow(2, idx)), out_planes//int(math.pow(2, idx))))
+                self.conv_list.append(ConvX(out_planes // int(math.pow(2, idx)), out_planes // int(math.pow(2, idx))))
 
     def forward(self, x):
         out_list = []
@@ -117,9 +138,20 @@ class CatBottleneck(nn.Module):
         out = torch.cat(out_list, dim=1)
         return out
 
-#STDC2Net
+
+# STDC2Net
 class STDCNet1446(nn.Module):
-    def __init__(self, base=64, layers=[4,5,3], block_num=4, type="cat", num_classes=1000, dropout=0.20, pretrain_model='', use_conv_last=False):
+    def __init__(
+        self,
+        base=64,
+        layers=[4, 5, 3],
+        block_num=4,
+        type="cat",
+        num_classes=1000,
+        dropout=0.20,
+        pretrain_model='',
+        use_conv_last=False,
+    ):
         super(STDCNet1446, self).__init__()
         if type == "cat":
             block = CatBottleneck
@@ -127,13 +159,13 @@ class STDCNet1446(nn.Module):
             block = AddBottleneck
         self.use_conv_last = use_conv_last
         self.features = self._make_layers(base, layers, block_num, block)
-        self.conv_last = ConvX(base*16, max(1024, base*16), 1, 1)
+        self.conv_last = ConvX(base * 16, max(1024, base * 16), 1, 1)
         self.gap = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Linear(max(1024, base*16), max(1024, base*16), bias=False)
-        self.bn = nn.BatchNorm1d(max(1024, base*16))
+        self.fc = nn.Linear(max(1024, base * 16), max(1024, base * 16), bias=False)
+        self.bn = nn.BatchNorm1d(max(1024, base * 16))
         self.relu = nn.ReLU(inplace=True)
         self.dropout = nn.Dropout(p=dropout)
-        self.linear = nn.Linear(max(1024, base*16), num_classes, bias=False)
+        self.linear = nn.Linear(max(1024, base * 16), num_classes, bias=False)
 
         self.x2 = nn.Sequential(self.features[:1])
         self.x4 = nn.Sequential(self.features[1:2])
@@ -142,7 +174,7 @@ class STDCNet1446(nn.Module):
         self.x32 = nn.Sequential(self.features[11:])
 
         if pretrain_model:
-            logging.info('use pretrain model {}'.format(pretrain_model))
+            logging.info('Using pretrain model {}'.format(pretrain_model))
             self.init_weight(pretrain_model)
         else:
             self.init_params()
@@ -171,17 +203,17 @@ class STDCNet1446(nn.Module):
 
     def _make_layers(self, base, layers, block_num, block):
         features = []
-        features += [ConvX(3, base//2, 3, 2)]
-        features += [ConvX(base//2, base, 3, 2)]
+        features += [ConvX(3, base // 2, 3, 2)]
+        features += [ConvX(base // 2, base, 3, 2)]
 
         for i, layer in enumerate(layers):
             for j in range(layer):
                 if i == 0 and j == 0:
-                    features.append(block(base, base*4, block_num, 2))
+                    features.append(block(base, base * 4, block_num, 2))
                 elif j == 0:
-                    features.append(block(base*int(math.pow(2,i+1)), base*int(math.pow(2,i+2)), block_num, 2))
+                    features.append(block(base * int(math.pow(2, i + 1)), base * int(math.pow(2, i + 2)), block_num, 2))
                 else:
-                    features.append(block(base*int(math.pow(2,i+2)), base*int(math.pow(2,i+2)), block_num, 1))
+                    features.append(block(base * int(math.pow(2, i + 2)), base * int(math.pow(2, i + 2)), block_num, 1))
 
         return nn.Sequential(*features)
 
@@ -192,7 +224,7 @@ class STDCNet1446(nn.Module):
         feat16 = self.x16(feat8)
         feat32 = self.x32(feat16)
         if self.use_conv_last:
-           feat32 = self.conv_last(feat32)
+            feat32 = self.conv_last(feat32)
 
         return feat2, feat4, feat8, feat16, feat32
 
@@ -208,23 +240,36 @@ class STDCNet1446(nn.Module):
         out = self.linear(out)
         return out
 
+
 # STDC1Net
 class STDCNet813(nn.Module):
-    def __init__(self, base=64, layers=[2,2,2], block_num=4, type="cat", num_classes=1000, dropout=0.20, pretrain_model='', use_conv_last=False):
+    def __init__(
+        self,
+        base=64,
+        layers=[2, 2, 2],
+        block_num=4,
+        type="cat",
+        num_classes=1000,
+        dropout=0.20,
+        pretrain_model='',
+        use_conv_last=False,
+    ):
         super(STDCNet813, self).__init__()
+
         if type == "cat":
             block = CatBottleneck
         elif type == "add":
             block = AddBottleneck
+
         self.use_conv_last = use_conv_last
         self.features = self._make_layers(base, layers, block_num, block)
-        self.conv_last = ConvX(base*16, max(1024, base*16), 1, 1)
+        self.conv_last = ConvX(base * 16, max(1024, base * 16), 1, 1)
         self.gap = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Linear(max(1024, base*16), max(1024, base*16), bias=False)
-        self.bn = nn.BatchNorm1d(max(1024, base*16))
+        self.fc = nn.Linear(max(1024, base * 16), max(1024, base * 16), bias=False)
+        self.bn = nn.BatchNorm1d(max(1024, base * 16))
         self.relu = nn.ReLU(inplace=True)
         self.dropout = nn.Dropout(p=dropout)
-        self.linear = nn.Linear(max(1024, base*16), num_classes, bias=False)
+        self.linear = nn.Linear(max(1024, base * 16), num_classes, bias=False)
 
         self.x2 = nn.Sequential(self.features[:1])
         self.x4 = nn.Sequential(self.features[1:2])
@@ -233,7 +278,7 @@ class STDCNet813(nn.Module):
         self.x32 = nn.Sequential(self.features[6:])
 
         if pretrain_model:
-            logging.info('use pretrain model {}'.format(pretrain_model))
+            logging.info('Using pretrain model {}'.format(pretrain_model))
             self.init_weight(pretrain_model)
         else:
             self.init_params()
@@ -262,17 +307,17 @@ class STDCNet813(nn.Module):
 
     def _make_layers(self, base, layers, block_num, block):
         features = []
-        features += [ConvX(3, base//2, 3, 2)]
-        features += [ConvX(base//2, base, 3, 2)]
+        features += [ConvX(3, base // 2, 3, 2)]
+        features += [ConvX(base // 2, base, 3, 2)]
 
         for i, layer in enumerate(layers):
             for j in range(layer):
                 if i == 0 and j == 0:
-                    features.append(block(base, base*4, block_num, 2))
+                    features.append(block(base, base * 4, block_num, 2))
                 elif j == 0:
-                    features.append(block(base*int(math.pow(2,i+1)), base*int(math.pow(2,i+2)), block_num, 2))
+                    features.append(block(base * int(math.pow(2, i + 1)), base * int(math.pow(2, i + 2)), block_num, 2))
                 else:
-                    features.append(block(base*int(math.pow(2,i+2)), base*int(math.pow(2,i+2)), block_num, 1))
+                    features.append(block(base * int(math.pow(2, i + 2)), base * int(math.pow(2, i + 2)), block_num, 1))
 
         return nn.Sequential(*features)
 
@@ -283,7 +328,7 @@ class STDCNet813(nn.Module):
         feat16 = self.x16(feat8)
         feat32 = self.x32(feat16)
         if self.use_conv_last:
-           feat32 = self.conv_last(feat32)
+            feat32 = self.conv_last(feat32)
 
         return feat2, feat4, feat8, feat16, feat32
 
@@ -299,17 +344,13 @@ class STDCNet813(nn.Module):
         out = self.linear(out)
         return out
 
+
 class ConvBNReLU(nn.Module):
     def __init__(self, in_chan, out_chan, ks=3, stride=1, padding=1, *args, **kwargs):
         super(ConvBNReLU, self).__init__()
-        self.conv = nn.Conv2d(in_chan,
-                out_chan,
-                kernel_size = ks,
-                stride = stride,
-                padding = padding,
-                bias = False)
+        self.conv = nn.Conv2d(in_chan, out_chan, kernel_size=ks, stride=stride, padding=padding, bias=False)
         self.bn = nn.BatchNorm2d(out_chan)
-        #self.bn = nn.BatchNorm2d(out_chan, activation='none')
+        # self.bn = nn.BatchNorm2d(out_chan, activation='none')
         self.relu = nn.ReLU()
         self.init_weight()
 
@@ -323,7 +364,8 @@ class ConvBNReLU(nn.Module):
         for ly in self.children():
             if isinstance(ly, nn.Conv2d):
                 nn.init.kaiming_normal_(ly.weight, a=1)
-                if not ly.bias is None: nn.init.constant_(ly.bias, 0)
+                if not ly.bias is None:
+                    nn.init.constant_(ly.bias, 0)
 
 
 class BiSeNetOutput(nn.Module):
@@ -342,7 +384,8 @@ class BiSeNetOutput(nn.Module):
         for ly in self.children():
             if isinstance(ly, nn.Conv2d):
                 nn.init.kaiming_normal_(ly.weight, a=1)
-                if not ly.bias is None: nn.init.constant_(ly.bias, 0)
+                if not ly.bias is None:
+                    nn.init.constant_(ly.bias, 0)
 
     def get_params(self):
         wd_params, nowd_params = [], []
@@ -360,9 +403,9 @@ class AttentionRefinementModule(nn.Module):
     def __init__(self, in_chan, out_chan, *args, **kwargs):
         super(AttentionRefinementModule, self).__init__()
         self.conv = ConvBNReLU(in_chan, out_chan, ks=3, stride=1, padding=1)
-        self.conv_atten = nn.Conv2d(out_chan, out_chan, kernel_size= 1, bias=False)
+        self.conv_atten = nn.Conv2d(out_chan, out_chan, kernel_size=1, bias=False)
         self.bn_atten = nn.BatchNorm2d(out_chan)
-        #self.bn_atten = nn.BatchNorm2d(out_chan, activation='none')
+        # self.bn_atten = nn.BatchNorm2d(out_chan, activation='none')
 
         self.sigmoid_atten = nn.Sigmoid()
         self.init_weight()
@@ -380,11 +423,12 @@ class AttentionRefinementModule(nn.Module):
         for ly in self.children():
             if isinstance(ly, nn.Conv2d):
                 nn.init.kaiming_normal_(ly.weight, a=1)
-                if not ly.bias is None: nn.init.constant_(ly.bias, 0)
+                if not ly.bias is None:
+                    nn.init.constant_(ly.bias, 0)
 
 
 class ContextPath(nn.Module):
-    def __init__(self, backbone='CatNetSmall', pretrain_model='', use_conv_last=False, *args, **kwargs):
+    def __init__(self, backbone, pretrain_model='', use_conv_last=False, *args, **kwargs):
         super(ContextPath, self).__init__()
 
         self.backbone_name = backbone
@@ -438,13 +482,14 @@ class ContextPath(nn.Module):
         feat16_up = F.interpolate(feat16_sum, (H8, W8), mode='nearest')
         feat16_up = self.conv_head16(feat16_up)
 
-        return feat2, feat4, feat8, feat16, feat16_up, feat32_up # x8, x16
+        return feat2, feat4, feat8, feat16, feat16_up, feat32_up  # x8, x16
 
     def init_weight(self):
         for ly in self.children():
             if isinstance(ly, nn.Conv2d):
                 nn.init.kaiming_normal_(ly.weight, a=1)
-                if not ly.bias is None: nn.init.constant_(ly.bias, 0)
+                if not ly.bias is None:
+                    nn.init.constant_(ly.bias, 0)
 
     def get_params(self):
         wd_params, nowd_params = [], []
@@ -462,18 +507,8 @@ class FeatureFusionModule(nn.Module):
     def __init__(self, in_chan, out_chan, *args, **kwargs):
         super(FeatureFusionModule, self).__init__()
         self.convblk = ConvBNReLU(in_chan, out_chan, ks=1, stride=1, padding=0)
-        self.conv1 = nn.Conv2d(out_chan,
-                out_chan//4,
-                kernel_size = 1,
-                stride = 1,
-                padding = 0,
-                bias = False)
-        self.conv2 = nn.Conv2d(out_chan//4,
-                out_chan,
-                kernel_size = 1,
-                stride = 1,
-                padding = 0,
-                bias = False)
+        self.conv1 = nn.Conv2d(out_chan, out_chan // 4, kernel_size=1, stride=1, padding=0, bias=False)
+        self.conv2 = nn.Conv2d(out_chan // 4, out_chan, kernel_size=1, stride=1, padding=0, bias=False)
         self.relu = nn.ReLU(inplace=True)
         self.sigmoid = nn.Sigmoid()
         self.init_weight()
@@ -494,7 +529,8 @@ class FeatureFusionModule(nn.Module):
         for ly in self.children():
             if isinstance(ly, nn.Conv2d):
                 nn.init.kaiming_normal_(ly.weight, a=1)
-                if not ly.bias is None: nn.init.constant_(ly.bias, 0)
+                if not ly.bias is None:
+                    nn.init.constant_(ly.bias, 0)
 
     def get_params(self):
         wd_params, nowd_params = [], []
@@ -509,7 +545,20 @@ class FeatureFusionModule(nn.Module):
 
 
 class STDC(nn.Module):
-    def __init__(self, backbone, n_classes, pretrain_model='', use_boundary_2=False, use_boundary_4=False, use_boundary_8=False, use_boundary_16=False, use_conv_last=False, heat_map=False, *args, **kwargs):
+    def __init__(
+        self,
+        backbone,
+        n_classes,
+        pretrain_model='',
+        use_boundary_2=False,
+        use_boundary_4=False,
+        use_boundary_8=False,
+        use_boundary_16=False,
+        use_conv_last=False,
+        heat_map=False,
+        *args,
+        **kwargs
+    ):
         super(STDC, self).__init__()
 
         self.use_boundary_2 = use_boundary_2
@@ -568,11 +617,11 @@ class STDC(nn.Module):
 
         feat_out = self.conv_out(feat_fuse)
         feat_out = F.interpolate(feat_out, (H, W), mode='bilinear', align_corners=True)
-        
+
         # Added to avoid having multiple outputs at inference time
         if not self.training:
             return feat_out
-        
+
         feat_out16 = self.conv_out16(feat_cp8)
         feat_out32 = self.conv_out32(feat_cp16)
         feat_out16 = F.interpolate(feat_out16, (H, W), mode='bilinear', align_corners=True)
@@ -594,7 +643,8 @@ class STDC(nn.Module):
         for ly in self.children():
             if isinstance(ly, nn.Conv2d):
                 nn.init.kaiming_normal_(ly.weight, a=1)
-                if not ly.bias is None: nn.init.constant_(ly.bias, 0)
+                if ly.bias is not None:
+                    nn.init.constant_(ly.bias, 0)
 
     def get_params(self):
         wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
@@ -607,3 +657,9 @@ class STDC(nn.Module):
                 wd_params += child_wd_params
                 nowd_params += child_nowd_params
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
+    
+    def get_param_groups(self):
+        return [
+            self.cp.backbone.parameters(),
+            [p for n, p in self.named_parameters() if not n.startswith('cp.backbone.')]
+        ]

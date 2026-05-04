@@ -67,11 +67,13 @@ class resnet101(torch.nn.Module):
 
 
 def build_contextpath(name):
-    model = {
-        'resnet18': resnet18(pretrained=True),
-        'resnet101': resnet101(pretrained=True)
-    }
-    return model[name]
+    match name:
+        case 'resnet18':
+            return resnet18(pretrained=True)
+        case 'resnet101':
+            return resnet101(pretrained=True)
+        case _:
+            raise ValueError(f"Unsupported context path: {name}")
 
 
 class ConvBlock(torch.nn.Module):
@@ -238,3 +240,9 @@ class BiSeNet(torch.nn.Module):
             return result, cx1_sup, cx2_sup
 
         return result
+    
+    def get_param_groups(self):
+        return [
+            self.context_path.parameters(),
+            [p for n, p in self.named_parameters() if not n.startswith('context_path.')]
+        ]

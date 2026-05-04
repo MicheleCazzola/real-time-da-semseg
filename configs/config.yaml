@@ -20,7 +20,7 @@ data:
   resize:
     height: 512
     width: 512
-  augment: false
+  augment: true
   aug_prob: 1
   aug_names:
     RC:
@@ -28,7 +28,7 @@ data:
       width: 512
 
 model:
-  model: "bisenet_v1_rt"
+  model: "pidnet_s"
   checkpoint: null
   ignore_index: -1
   num_classes: 7
@@ -46,7 +46,16 @@ training:
   scheduler: "poly"
   power: 0.9
   eta_min: 1.e-6
-  learning_rate: 1.e-4
+  learning_rate: 
+    pidnet_s: 
+      - 1.e-4
+      - 1.e-3
+    bisenet_v1_rt:
+      - 1.e-4
+      - 1.e-3
+    stdc1:
+      - 1.e-4
+      - 1.e-3
   weight_decay: 1.e-4
   step_size: 10
   gamma: 0.1

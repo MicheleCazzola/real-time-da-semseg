@@ -26,23 +26,23 @@ def get_pidnet(model_name, num_classes, pretrained_weights, imgnet_pretrained) -
         model_dict = model.state_dict()
         pretrained_state = {k: v for k, v in pretrained_state.items() if (k in model_dict and v.shape == model_dict[k].shape)}
         model_dict.update(pretrained_state)
-        msg = 'Loaded {} parameters!'.format(len(pretrained_state))
-        logging.info('Attention!!!')
-        logging.info(msg)
-        logging.info('Over!!!')
+        pretrained_param_keys = pretrained_state
         model.load_state_dict(model_dict, strict = False)
+        logging.info(f"Loaded {len(pretrained_state)} parameters from ImageNet pretrained weights")
     else:
         pretrained_dict = torch.load(pretrained_weights, map_location='cpu')
         model_dict = model.state_dict()
         pretrained_dict = {k[6:]: v for k, v in pretrained_dict.items() if (k[6:] in model_dict and v.shape == model_dict[k[6:]].shape)}
-        msg = 'Loaded {} parameters!'.format(len(pretrained_dict))
-        logging.info('Attention!!!')
-        logging.info(msg)
-        logging.info('Over!!!')
+        pretrained_param_keys = pretrained_dict
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict, strict = False)
+        logging.info(f"Loaded {len(pretrained_dict)} parameters from pretrained weights")
 
-    return model
+    fresh_params = [p for k, p in model.named_parameters() if k not in pretrained_param_keys]
+    pretrained_params = [p for k, p in model.named_parameters() if k in pretrained_param_keys]
+    param_groups = [pretrained_params, fresh_params]
+    
+    return model, param_groups
 
 
 def get_pred_model(name, num_classes):
