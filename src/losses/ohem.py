@@ -3,11 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class OHEMCrossEntropy(nn.Module):
-    def __init__(self, ignore_label=-1, thres=0.7, min_kept=100000, weight=None):
+    def __init__(self, ignore_index=-1, thres=0.7, min_kept=100000, weight=None):
         super(OHEMCrossEntropy, self).__init__()
         self.thresh = thres
         self.min_kept = max(1, min_kept)
-        self.ignore_label = ignore_label
+        self.ignore_index = ignore_index
         self.weight = weight
 
     def forward(self, score, target):
@@ -17,12 +17,12 @@ class OHEMCrossEntropy(nn.Module):
             score, 
             target, 
             weight=self.weight, 
-            ignore_index=self.ignore_label, 
+            ignore_index=self.ignore_index, 
             reduction='none'
         ).view(-1)
         
         # Mask out ignored pixels
-        mask = (target != self.ignore_label).view(-1)
+        mask = (target != self.ignore_index).view(-1)
         valid_pixels = mask.sum()
         
         if valid_pixels == 0:
@@ -31,7 +31,7 @@ class OHEMCrossEntropy(nn.Module):
         # Ground truth confidences
         pred = F.softmax(score, dim=1)
         tmp_target = target.clone()
-        tmp_target[tmp_target == self.ignore_label] = 0
+        tmp_target[tmp_target == self.ignore_index] = 0
         
         confidences = pred.gather(1, tmp_target.unsqueeze(1)).view(-1)
         confidences = confidences[mask]

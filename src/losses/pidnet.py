@@ -28,9 +28,9 @@ def pidnet_loss(outputs, labels, sem_loss, bd_loss, ignore_index=-1, bd_gt=None)
     return loss_s, loss_b, loss_sb
 
 class PIDNetSemanticLoss(nn.Module):
-    def __init__(self, type=SemanticLoss.CE, ignore_label=-1, **kwargs):
+    def __init__(self, type=SemanticLoss.CE, ignore_index=-1, **kwargs):
         super(PIDNetSemanticLoss, self).__init__()
-        self.ignore_label = ignore_label
+        self.ignore_index = ignore_index
         self.loss_type = type
         
         if isinstance(self.loss_type, list):
@@ -44,20 +44,20 @@ class PIDNetSemanticLoss(nn.Module):
             case SemanticLoss.CE.value:
                 criterion = nn.CrossEntropyLoss(
                     weight=kwargs.get('class_weight'),
-                    ignore_index=self.ignore_label
+                    ignore_index=self.ignore_index
                 )
             case SemanticLoss.OHEM.value:
                 criterion = OHEMCrossEntropy(
-                    ignore_label=self.ignore_label,
+                    ignore_index=self.ignore_index,
                     thres=kwargs.get('ohem_thres', 0.7),
                     min_kept=kwargs.get('ohem_min_kept', 100000),
                     weight=kwargs.get('class_weight')
                 )
             case SemanticLoss.FOCAL.value:
                 criterion = FocalLoss(
-                    gamma=kwargs.get('focal_gamma'),
+                    gamma=kwargs.get('focal_gamma', 2.0),
                     alpha=kwargs.get('class_weight'),
-                    ignore_label=self.ignore_label
+                    ignore_index=self.ignore_index
                 )
             case _:
                 raise ValueError(f"Unsupported loss type: {self.loss_type}")

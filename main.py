@@ -64,6 +64,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--iterations', type=int, default=1000, help='Number of iterations for performance measurement.'
     )
+    parser.add_argument('--loss', type=str, help='Loss function to use for training.')
     args = parser.parse_args()
 
     with open(args.from_config, 'r') as f:

@@ -28,18 +28,18 @@ def setup_rt_model(cfg, device, backbone_name=None):
     if hasattr(cfg.training, weight_key):
         sem_kwargs['weight'] = getattr(cfg.training, weight_key)
         
-    if cfg.training.criterion == "cross_entropy":
+    if cfg.training.loss == "cross_entropy":
         base_criterion = nn.CrossEntropyLoss(ignore_index=cfg.model.ignore_index, **sem_kwargs)
-    elif cfg.training.criterion == "ohem":
+    elif cfg.training.loss == "ohem":
         thres = getattr(cfg.training, "ohem_thres", 0.7)
         min_kept = getattr(cfg.training, "ohem_min_kept", 100000)
-        base_criterion = OHEMCrossEntropy(ignore_label=cfg.model.ignore_index, thres=thres, min_kept=min_kept, **sem_kwargs)
-    elif cfg.training.criterion == "focal":
+        base_criterion = OHEMCrossEntropy(ignore_index=cfg.model.ignore_index, thres=thres, min_kept=min_kept, **sem_kwargs)
+    elif cfg.training.loss == "focal":
         gamma = getattr(cfg.training, "focal_gamma", 2.0)
         alpha = sem_kwargs.get('weight', None)
         base_criterion = FocalLoss(ignore_index=cfg.model.ignore_index, gamma=gamma, alpha=alpha)
     else:
-        raise ValueError(f"Unsupported criterion: {cfg.training.criterion}")
+        raise ValueError(f"Unsupported criterion: {cfg.training.loss}")
         
     # Model and loss initialization
     if "bisenet" in model_name:
@@ -60,7 +60,7 @@ def setup_rt_model(cfg, device, backbone_name=None):
         for k in ["class_weight", "focal_gamma", "ohem_thres", "ohem_min_kept"]:
             if hasattr(cfg.training, k): args[k] = getattr(cfg.training, k)
             
-        sem_loss = PIDNetSemanticLoss(type=cfg.training.criterion, ignore_label=cfg.model.ignore_index, **args)
+        sem_loss = PIDNetSemanticLoss(type=cfg.training.loss, ignore_index=cfg.model.ignore_index, **args)
         bd_loss = BondaryLoss()
         criterion = PIDNetLoss(sem_loss=sem_loss, bd_loss=bd_loss, ignore_index=cfg.model.ignore_index)
     else:

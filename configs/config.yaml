@@ -40,8 +40,9 @@ training:
   resume: false
   adaptation: null
   epochs: 20
-  criterion: "cross_entropy"
+  loss: "cross_entropy"
   loss_weights: null
+  focal_gamma: 2.0
   optimizer: "AdamW"
   scheduler: "poly"
   power: 0.9

@@ -68,8 +68,8 @@ def pidnet_model_setup(cfg, device):
     args = {key: getattr(cfg.training, key) for key in keys if hasattr(cfg.training, key)}
     
     sem_loss = PIDNetSemanticLoss(
-        type=cfg.training.criterion,
-        ignore_label=cfg.model.ignore_index,
+        type=cfg.training.loss,
+        ignore_index=cfg.model.ignore_index,
         **args
     )
     bd_loss = BondaryLoss()

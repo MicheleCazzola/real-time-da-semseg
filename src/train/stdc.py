@@ -19,7 +19,7 @@ def stdc_model_setup(cfg, backbone_name, device):
     # Using same configuration as STDC-Seg paper
     model = STDC(backbone_name, cfg.model.num_classes, pretrain_model=pretrained_model, use_boundary_8=True).to(device)
     
-    match cfg.training.criterion:
+    match cfg.training.loss:
         case "cross_entropy":
             criterion = nn.CrossEntropyLoss(weight=cfg.training.loss_weights, ignore_index=cfg.model.ignore_index)
         case "ohem":
@@ -30,7 +30,7 @@ def stdc_model_setup(cfg, backbone_name, device):
             gamma = cfg.training.focal_gamma if hasattr(cfg.training, "focal_gamma") else 2.0
             criterion = FocalLoss(alpha=cfg.training.loss_weights, ignore_index=cfg.model.ignore_index, gamma=gamma)
         case _:
-            raise ValueError(f"Unsupported loss type: {cfg.training.criterion}")
+            raise ValueError(f"Unsupported loss type: {cfg.training.loss}")
         
     detail_criterion = DetailAggregateLoss()
 
