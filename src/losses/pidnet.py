@@ -43,7 +43,7 @@ class PIDNetSemanticLoss(nn.Module):
         match loss_type:
             case SemanticLoss.CE.value:
                 criterion = nn.CrossEntropyLoss(
-                    weight=kwargs.get('class_weight'),
+                    weight=kwargs.get('weight', None),
                     ignore_index=self.ignore_index
                 )
             case SemanticLoss.OHEM.value:
@@ -51,12 +51,12 @@ class PIDNetSemanticLoss(nn.Module):
                     ignore_index=self.ignore_index,
                     thres=kwargs.get('ohem_thres', 0.7),
                     min_kept=kwargs.get('ohem_min_kept', 100000),
-                    weight=kwargs.get('class_weight')
+                    weight=kwargs.get('weight', None)
                 )
             case SemanticLoss.FOCAL.value:
                 criterion = FocalLoss(
                     gamma=kwargs.get('focal_gamma', 2.0),
-                    alpha=kwargs.get('class_weight'),
+                    alpha=kwargs.get('weight', None),
                     ignore_index=self.ignore_index
                 )
             case _:

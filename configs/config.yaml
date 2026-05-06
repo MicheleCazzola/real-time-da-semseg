@@ -41,7 +41,7 @@ training:
   adaptation: null
   epochs: 20
   loss: "cross_entropy"
-  loss_weights: null
+  weighted_loss: true
   focal_gamma: 2.0
   optimizer: "AdamW"
   scheduler: "poly"

@@ -6,6 +6,7 @@ from PIL import Image
 from pathlib import Path
 import numpy as np
 import cv2
+import torch
 from torchvision.datasets.vision import VisionDataset
 
 def pil_loader(path, codify):
@@ -64,8 +65,68 @@ class LoveDA(VisionDataset):
         Agricultural=6
     )
     
-    id2label = {v: k for k, v in label2id.items()}
+    id2label = OrderedDict({
+        v: k for k, v in label2id.items()
+    })
     
+    class_frequency_train = {
+        "urban": OrderedDict({
+            "Background": 0.4845071829571744,
+            "Building": 0.2120044261084477,
+            "Road": 0.09279747200463612,
+            "Water": 0.03731724537886264,
+            "Barren": 0.0756555935761753,
+            "Forest": 0.07916728358161661,
+            "Agricultural": 0.01855079639308729
+        }),
+        "rural": OrderedDict({
+            "Background": 0.2528211363277947,
+            "Building": 0.026519406365771797,
+            "Road": 0.019447644795621704,
+            "Water": 0.0860276709433357,
+            "Barren": 0.032679162738100336,
+            "Forest": 0.22840263991146437,
+            "Agricultural": 0.3541023389179114
+        }),
+        "all": OrderedDict({
+            "Background": 0.3578595226769841,
+            "Building": 0.11061185582123938,
+            "Road": 0.05270190244779463,
+            "Water": 0.06394406006512347,
+            "Barren": 0.05216318006219974,
+            "Forest": 0.1607445256521755,
+            "Agricultural": 0.20197495327448317
+        })
+    }
+    
+    @staticmethod
+    def get_class_weights(domain, loss_type):
+        domain = domain.lower()
+        if domain not in LoveDA.class_frequency_train:
+            raise ValueError(f"Domain '{domain}' not valid")
+        class_freq = LoveDA.class_frequency_train[domain]
+        
+        sorted_freqs = sorted([(LoveDA.label2id[k], v) for k, v in class_freq.items()], key=lambda x: x[0])
+        freqs = np.array([f for _, f in sorted_freqs])
+        
+        if loss_type == "focal":
+            # Focal: Normalized Inverse Frequency
+            weights = 1.0 / freqs
+        elif loss_type == "cross_entropy":
+            # CE: Median Frequency Balancing
+            median_freq = np.median(freqs)
+            weights = median_freq / freqs
+        elif loss_type == "ohem":
+            # OHEM: Smoothed Log-Inverse to limit double penalty
+            weights = 1.0 / np.log(1.02 + freqs)
+        else:
+            raise ValueError(f"Loss type '{loss_type}' not supported for class weights")
+            
+        # Normalization
+        weights = weights / np.sum(weights)
+        
+        return torch.tensor(weights, dtype=torch.float32)
+
     def __init__(self, root, img, mask, directories=None, transforms=None, bd=False, reduce_factor=1):
         super(LoveDA, self).__init__(root)
 

@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 
+from src.dataset.dataset import LoveDA
 from src.models.bisenet import BiSeNet
 from src.models.stdc import STDC
 from src.train.pidnet import get_pidnet
@@ -24,16 +25,21 @@ def setup_rt_model(cfg, device, backbone_name=None):
     
     # Semantic criterion setup
     sem_kwargs = {}
-    weight_key = "class_weight" if hasattr(cfg.training, "class_weight") else "loss_weights"
-    if hasattr(cfg.training, weight_key):
-        sem_kwargs['weight'] = getattr(cfg.training, weight_key)
+    if cfg.training.weighted_loss:
+        sem_kwargs['weight'] = LoveDA.get_class_weights(cfg.path.source, cfg.training.loss).to(device)
+        
+        print(f"Using weighted loss")
+    else:
+        print("Using unweighted loss")
         
     if cfg.training.loss == "cross_entropy":
-        base_criterion = nn.CrossEntropyLoss(ignore_index=cfg.model.ignore_index, **sem_kwargs)
+        weight = sem_kwargs.get('weight', None)
+        base_criterion = nn.CrossEntropyLoss(ignore_index=cfg.model.ignore_index, weight=weight)
     elif cfg.training.loss == "ohem":
         thres = getattr(cfg.training, "ohem_thres", 0.7)
         min_kept = getattr(cfg.training, "ohem_min_kept", 100000)
-        base_criterion = OHEMCrossEntropy(ignore_index=cfg.model.ignore_index, thres=thres, min_kept=min_kept, **sem_kwargs)
+        weight = sem_kwargs.get('weight', None)
+        base_criterion = OHEMCrossEntropy(ignore_index=cfg.model.ignore_index, thres=thres, min_kept=min_kept, weight=weight)
     elif cfg.training.loss == "focal":
         gamma = getattr(cfg.training, "focal_gamma", 2.0)
         alpha = sem_kwargs.get('weight', None)
@@ -56,8 +62,8 @@ def setup_rt_model(cfg, device, backbone_name=None):
         pretrained_weights = os.path.join(cfg.path.weights, f"{cfg.model.model}.pth")
         model, param_groups = get_pidnet(cfg.model.model, cfg.model.num_classes, pretrained_weights, imgnet_pretrained=True)
         
-        args = {}
-        for k in ["class_weight", "focal_gamma", "ohem_thres", "ohem_min_kept"]:
+        args = {"weight": sem_kwargs.get('weight', None)}
+        for k in ["focal_gamma", "ohem_thres", "ohem_min_kept"]:
             if hasattr(cfg.training, k): args[k] = getattr(cfg.training, k)
             
         sem_loss = PIDNetSemanticLoss(type=cfg.training.loss, ignore_index=cfg.model.ignore_index, **args)
