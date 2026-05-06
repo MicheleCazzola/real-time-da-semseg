@@ -108,234 +108,238 @@ if __name__ == "__main__":
     else:
         augmentations = get_nop_augmentation()
 
-    is_model_rt = cfg.model.model not in [ModelType.DEEPLAB_V2.value]
+    # is_model_rt = cfg.model.model not in [ModelType.DEEPLAB_V2.value]
 
-    if is_model_rt:
-        match cfg.model.model:
-            case ModelType.BISENET_V1.value | ModelType.BISENET_V1_RT.value:
-                bd_required = False
-                backbone_name = "resnet18" if cfg.model.model == ModelType.BISENET_V1_RT.value else "resnet101"
-                make_train_specific_losses = lambda train_result: {
-                    "semantic": {
-                        k: v
-                        for k, v in train_result.items()
-                        if k not in ["train_losses", "val_losses", "train_mious", "val_mious", "train_ious", "val_ious"]
-                    }
+    # if is_model_rt:
+    match cfg.model.model:
+        case ModelType.DEEPLAB_V2.value:
+            bd_required = False
+            backbone_name = None
+            make_train_specific_losses = lambda _: {}
+        case ModelType.BISENET_V1.value | ModelType.BISENET_V1_RT.value:
+            bd_required = False
+            backbone_name = "resnet18" if cfg.model.model == ModelType.BISENET_V1_RT.value else "resnet101"
+            make_train_specific_losses = lambda train_result: {
+                "semantic": {
+                    k: v
+                    for k, v in train_result.items()
+                    if k not in ["train_losses", "val_losses", "train_mious", "val_mious", "train_ious", "val_ious"]
                 }
-            case ModelType.STDC1.value | ModelType.STDC2.value:
-                bd_required = False
-                backbone_name = "STDCNet813" if cfg.model.model == ModelType.STDC1.value else "STDCNet1446"
-                make_train_specific_losses = lambda train_result: {
-                    "semantic": {
-                        k: v
-                        for k, v in train_result.items()
-                        if "sem" in k
-                        and k
-                        not in ["train_losses", "val_losses", "train_mious", "val_mious", "train_ious", "val_ious"]
-                    },
-                    "boundary": {k: v for k, v in train_result.items() if "boundary" in k},
+            }
+        case ModelType.STDC1.value | ModelType.STDC2.value:
+            bd_required = False
+            backbone_name = "STDCNet813" if cfg.model.model == ModelType.STDC1.value else "STDCNet1446"
+            make_train_specific_losses = lambda train_result: {
+                "semantic": {
+                    k: v
+                    for k, v in train_result.items()
+                    if "sem" in k
+                    and k
+                    not in ["train_losses", "val_losses", "train_mious", "val_mious", "train_ious", "val_ious"]
+                },
+                "boundary": {k: v for k, v in train_result.items() if "boundary" in k},
+            }
+        case ModelType.PIDNET_S.value | ModelType.PIDNET_M.value | ModelType.PIDNET_L.value:
+            bd_required = True
+            backbone_name = None
+            make_train_specific_losses = lambda train_result: {
+                "detail": {
+                    k: v
+                    for k, v in train_result.items()
+                    if k not in ["train_losses", "val_losses", "train_mious", "val_mious", "train_ious", "val_ious"]
                 }
-            case ModelType.PIDNET_S.value | ModelType.PIDNET_M.value | ModelType.PIDNET_L.value:
-                bd_required = True
-                backbone_name = None
-                make_train_specific_losses = lambda train_result: {
-                    "detail": {
-                        k: v
-                        for k, v in train_result.items()
-                        if k not in ["train_losses", "val_losses", "train_mious", "val_mious", "train_ious", "val_ious"]
-                    }
-                }
-            case _:
-                raise NotImplementedError(f"Model {cfg.model.model} not supported")
+            }
+        case _:
+            raise NotImplementedError(f"Model {cfg.model.model} not supported")
 
-        model, criterion, optimizer, scheduler = setup_rt_model(cfg, device, backbone_name)
+    model, criterion, optimizer, scheduler = setup_rt_model(cfg, device, backbone_name)
 
-        if cfg.training.train:
-            trainset_source, trainloader_source = trainset_setup(
-                cfg,
-                cfg.path.source,
-                g,
-                seed_worker,
-                num_workers,
-                augmentations=augmentations,
-                reduce_factor=args.reduce_factor,
-                boundaries=bd_required,
-            )
-            trainset_target, trainloader_target = trainset_setup(
-                cfg,
-                cfg.path.target,
-                g,
-                seed_worker,
-                num_workers,
-                augmentations=augmentations,
-                reduce_factor=args.reduce_factor,
-                boundaries=bd_required,
-            )
-            validset, validloader = validset_setup(
-                cfg,
-                cfg.path.target,
-                num_workers,
-                g,
-                seed_worker,
-                reduce_factor=args.reduce_factor,
-                boundaries=bd_required,
-            )
+    if cfg.training.train:
+        trainset_source, trainloader_source = trainset_setup(
+            cfg,
+            cfg.path.source,
+            g,
+            seed_worker,
+            num_workers,
+            augmentations=augmentations,
+            reduce_factor=args.reduce_factor,
+            boundaries=bd_required,
+        )
+        trainset_target, trainloader_target = trainset_setup(
+            cfg,
+            cfg.path.target,
+            g,
+            seed_worker,
+            num_workers,
+            augmentations=augmentations,
+            reduce_factor=args.reduce_factor,
+            boundaries=bd_required,
+        )
+        validset, validloader = validset_setup(
+            cfg,
+            cfg.path.target,
+            num_workers,
+            g,
+            seed_worker,
+            reduce_factor=args.reduce_factor,
+            boundaries=bd_required,
+        )
 
-            if cfg.training.adaptation is None:
-                train_result = train_rt_model(
-                    model,
-                    cfg.model.model,
-                    cfg.model.num_classes,
-                    trainloader_source,
-                    validloader,
-                    criterion,
-                    optimizer,
-                    scheduler,
-                    cfg.training.epochs,
-                    bd_required=bd_required,
-                    checkpoint_dir=output_dir,
-                    device=device,
-                    log_frequency=10,
-                )
-                train_specific_losses = make_train_specific_losses(train_result)
-            elif cfg.training.adaptation == AdaptationMethod.ADDA.value:
-                discriminator, disc_criterion, disc_optimizer, disc_scheduler = adda_setup(cfg, device)
-                train_result = train_adda(
-                    model,
-                    discriminator,
-                    cfg.model.model,
-                    cfg.model.num_classes,
-                    cfg.adda.lambda_adv,
-                    trainloader_source,
-                    trainloader_target,
-                    validloader,
-                    criterion,
-                    disc_criterion,
-                    optimizer,
-                    disc_optimizer,
-                    scheduler,
-                    disc_scheduler,
-                    cfg.training.epochs,
-                    bd_required=bd_required,
-                    checkpoint_dir=output_dir,
-                    device=device,
-                    log_frequency=10,
-                )
-                train_specific_losses = make_train_specific_losses(train_result)
-                train_specific_losses.update(
-                    {
-                        "discriminator": {
-                            "train_losses_adda_disc_source": train_result.get("train_losses_disc_source", []),
-                            "train_losses_adda_disc_target": train_result.get("train_losses_disc_target", []),
-                        }
-                    }
-                )
-            elif cfg.training.adaptation == AdaptationMethod.DACS.value:
-                raise NotImplementedError("DACS not integrated yet")
-            else:
-                raise NotImplementedError(f"Adaptation method {cfg.adaptation.adaptation_method} not supported")
-
-            save_results(os.path.join(output_dir, f"results.json"), **train_result)
-
-            plot_results(
-                dir_path=output_dir,
-                id2label=id2label,
-                main_losses=dict(
-                    zip(["train_losses", "val_losses"], list(map(train_result.get, ["train_losses", "val_losses"])))
-                ),
-                mean_ious=dict(
-                    zip(["train_mious", "val_mious"], list(map(train_result.get, ["train_mious", "val_mious"])))
-                ),
-                ious_per_class=dict(
-                    zip(["train_ious", "val_ious"], list(map(train_result.get, ["train_ious", "val_ious"])))
-                ),
-                train_losses=train_specific_losses,
-                show=False,
-            )
-
-        if cfg.training.measure:
-            resource_metrics = compute_performance_metrics(
+        if cfg.training.adaptation is None:
+            train_result = train_rt_model(
                 model,
-                args.iterations,
-                cfg.data.dimensions.height,
-                cfg.data.dimensions.width,
-                device,
-                save_to=os.path.join(output_dir, f"performance_metrics.json"),
-                return_out=False,
+                cfg.model.model,
+                cfg.model.num_classes,
+                trainloader_source,
+                validloader,
+                criterion,
+                optimizer,
+                scheduler,
+                cfg.training.epochs,
+                bd_required=bd_required,
+                checkpoint_dir=output_dir,
+                device=device,
+                log_frequency=10,
             )
+            train_specific_losses = make_train_specific_losses(train_result)
+        elif cfg.training.adaptation == AdaptationMethod.ADDA.value:
+            discriminator, disc_criterion, disc_optimizer, disc_scheduler = adda_setup(cfg, device)
+            train_result = train_adda(
+                model,
+                discriminator,
+                cfg.model.model,
+                cfg.model.num_classes,
+                cfg.adda.lambda_adv,
+                trainloader_source,
+                trainloader_target,
+                validloader,
+                criterion,
+                disc_criterion,
+                optimizer,
+                disc_optimizer,
+                scheduler,
+                disc_scheduler,
+                cfg.training.epochs,
+                bd_required=bd_required,
+                checkpoint_dir=output_dir,
+                device=device,
+                log_frequency=10,
+            )
+            train_specific_losses = make_train_specific_losses(train_result)
+            train_specific_losses.update(
+                {
+                    "discriminator": {
+                        "train_losses_adda_disc_source": train_result.get("train_losses_disc_source", []),
+                        "train_losses_adda_disc_target": train_result.get("train_losses_disc_target", []),
+                    }
+                }
+            )
+        elif cfg.training.adaptation == AdaptationMethod.DACS.value:
+            raise NotImplementedError("DACS not integrated yet")
+        else:
+            raise NotImplementedError(f"Adaptation method {cfg.adaptation.adaptation_method} not supported")
 
-    else:
-        match cfg.model.model:
-            case ModelType.DEEPLAB_V2.value:
-                model, criterion, optimizer, scheduler = deeplab_v2_model_setup(cfg, device)
+        save_results(os.path.join(output_dir, f"results.json"), **train_result)
 
-                if cfg.training.train:
-                    trainset_source, trainloader_source = trainset_setup(
-                        cfg, cfg.path.source, g, seed_worker, num_workers, augmentations=augmentations
-                    )
-                    trainset_target, trainloader_target = trainset_setup(
-                        cfg, cfg.path.target, g, seed_worker, num_workers, augmentations=augmentations
-                    )
-                    validset, validloader = validset_setup(cfg, cfg.path.target, num_workers, g, seed_worker)
+        plot_results(
+            dir_path=output_dir,
+            id2label=id2label,
+            main_losses=dict(
+                zip(["train_losses", "val_losses"], list(map(train_result.get, ["train_losses", "val_losses"])))
+            ),
+            mean_ious=dict(
+                zip(["train_mious", "val_mious"], list(map(train_result.get, ["train_mious", "val_mious"])))
+            ),
+            ious_per_class=dict(
+                zip(["train_ious", "val_ious"], list(map(train_result.get, ["train_ious", "val_ious"])))
+            ),
+            train_losses=train_specific_losses,
+            show=False,
+        )
 
-                    chp_path = os.path.join(output_dir, cfg.model.checkpoint) if cfg.model.checkpoint else None
-                    new_chp_path = os.path.join(output_dir, f"{cfg.model.model}.pth.tar")
+    if cfg.training.measure:
+        resource_metrics = compute_performance_metrics(
+            model,
+            args.iterations,
+            cfg.data.dimensions.height,
+            cfg.data.dimensions.width,
+            device,
+            save_to=os.path.join(output_dir, f"performance_metrics.json"),
+            return_out=False,
+        )
 
-                    train_losses, train_mious, train_ious = train_deeplab_v2(
-                        model,
-                        cfg.model.num_classes,
-                        trainloader_source,
-                        cfg.training.epochs,
-                        criterion,
-                        optimizer,
-                        scheduler,
-                        device,
-                        new_chp_path,
-                        cfg.training.resume,
-                        chp_path,
-                        log_frequency=10,
-                    )
-                    val_losses, val_mious, val_ious = evaluate_deeplab_v2(
-                        model,
-                        validloader,
-                        criterion,
-                        cfg.model.num_classes,
-                        device,
-                        new_chp_path,
-                        start_epoch=0,
-                        num_epochs=cfg.training.epochs,
-                        log_frequency=10,
-                    )
+    # else:
+    #     match cfg.model.model:
+    #         case ModelType.DEEPLAB_V2.value:
+    #             model, criterion, optimizer, scheduler = deeplab_v2_model_setup(cfg, device)
 
-                    save_results(
-                        os.path.join(output_dir, f"results.json"),
-                        train_losses=train_losses,
-                        train_mious=train_mious,
-                        train_ious=train_ious,
-                        val_losses=val_losses,
-                        val_mious=val_mious,
-                        val_ious=val_ious,
-                    )
+    #             if cfg.training.train:
+    #                 trainset_source, trainloader_source = trainset_setup(
+    #                     cfg, cfg.path.source, g, seed_worker, num_workers, augmentations=augmentations
+    #                 )
+    #                 trainset_target, trainloader_target = trainset_setup(
+    #                     cfg, cfg.path.target, g, seed_worker, num_workers, augmentations=augmentations
+    #                 )
+    #                 validset, validloader = validset_setup(cfg, cfg.path.target, num_workers, g, seed_worker)
 
-                    plot_results(
-                        dir_path=output_dir,
-                        id2label=id2label,
-                        main_losses={"train_losses": train_losses, "val_losses": val_losses},
-                        mean_ious={"train_mious": train_mious, "val_mious": val_mious},
-                        ious_per_class={"train_ious": train_ious, "val_ious": val_ious},
-                        train_losses=None,
-                        show=False,
-                    )
+    #                 chp_path = os.path.join(output_dir, cfg.model.checkpoint) if cfg.model.checkpoint else None
+    #                 new_chp_path = os.path.join(output_dir, f"{cfg.model.model}.pth.tar")
 
-                if cfg.training.measure:
-                    resource_metrics = compute_performance_metrics(
-                        model,
-                        args.iterations,
-                        cfg.data.dimensions.height,
-                        cfg.data.dimensions.width,
-                        device,
-                        save_to=os.path.join(output_dir, f"performance_metrics.json"),
-                        return_out=False,
-                    )
-            case _:
-                raise NotImplementedError(f"Model {cfg.model.model} not supported")
+    #                 train_losses, train_mious, train_ious = train_deeplab_v2(
+    #                     model,
+    #                     cfg.model.num_classes,
+    #                     trainloader_source,
+    #                     cfg.training.epochs,
+    #                     criterion,
+    #                     optimizer,
+    #                     scheduler,
+    #                     device,
+    #                     new_chp_path,
+    #                     cfg.training.resume,
+    #                     chp_path,
+    #                     log_frequency=10,
+    #                 )
+    #                 val_losses, val_mious, val_ious = evaluate_deeplab_v2(
+    #                     model,
+    #                     validloader,
+    #                     criterion,
+    #                     cfg.model.num_classes,
+    #                     device,
+    #                     new_chp_path,
+    #                     start_epoch=0,
+    #                     num_epochs=cfg.training.epochs,
+    #                     log_frequency=10,
+    #                 )
+
+    #                 save_results(
+    #                     os.path.join(output_dir, f"results.json"),
+    #                     train_losses=train_losses,
+    #                     train_mious=train_mious,
+    #                     train_ious=train_ious,
+    #                     val_losses=val_losses,
+    #                     val_mious=val_mious,
+    #                     val_ious=val_ious,
+    #                 )
+
+    #                 plot_results(
+    #                     dir_path=output_dir,
+    #                     id2label=id2label,
+    #                     main_losses={"train_losses": train_losses, "val_losses": val_losses},
+    #                     mean_ious={"train_mious": train_mious, "val_mious": val_mious},
+    #                     ious_per_class={"train_ious": train_ious, "val_ious": val_ious},
+    #                     train_losses=None,
+    #                     show=False,
+    #                 )
+
+    #             if cfg.training.measure:
+    #                 resource_metrics = compute_performance_metrics(
+    #                     model,
+    #                     args.iterations,
+    #                     cfg.data.dimensions.height,
+    #                     cfg.data.dimensions.width,
+    #                     device,
+    #                     save_to=os.path.join(output_dir, f"performance_metrics.json"),
+    #                     return_out=False,
+    #                 )
+    #         case _:
+    #             raise NotImplementedError(f"Model {cfg.model.model} not supported")

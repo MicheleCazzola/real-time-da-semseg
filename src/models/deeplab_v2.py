@@ -52,20 +52,16 @@ class Bottleneck(nn.Module):
 class ClassifierModule(nn.Module):
     def __init__(self, inplanes, dilation_series, padding_series, num_classes):
         super(ClassifierModule, self).__init__()
-        self.conv2d_list = nn.ModuleList()
-        for dilation, padding in zip(dilation_series, padding_series):
-            self.conv2d_list.append(
-                nn.Conv2d(inplanes, num_classes, kernel_size=3, stride=1, padding=padding, dilation=dilation, bias=True)
-            )
+        self.conv2d_list = nn.ModuleList(
+            nn.Conv2d(inplanes, num_classes, kernel_size=3, stride=1, padding=padding, dilation=dilation, bias=True)
+            for dilation, padding in zip(dilation_series, padding_series)
+        )
 
         for m in self.conv2d_list:
             m.weight.data.normal_(0, 0.01)
 
     def forward(self, x):
-        out = self.conv2d_list[0](x)
-        for i in range(len(self.conv2d_list) - 1):
-            out += self.conv2d_list[i + 1](x)
-        return out
+        return sum([conv2d(x) for conv2d in self.conv2d_list])
 
 
 class ResNetMulti(nn.Module):
@@ -84,7 +80,8 @@ class ResNetMulti(nn.Module):
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=1, dilation=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=1, dilation=4)
-        self.layer6 = ClassifierModule(2048, [6, 12, 18, 24], [6, 12, 18, 24], num_classes)
+        
+        self.aspp = ClassifierModule(2048, [6, 12, 18, 24], [6, 12, 18, 24], num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -121,9 +118,9 @@ class ResNetMulti(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
-        x = self.layer6(x)
+        x = self.aspp(x)
 
-        x = torch.nn.functional.interpolate(x, size=(H, W), mode='bilinear')
+        x = torch.nn.functional.interpolate(x, size=(H, W), mode='bilinear', align_corners=False)
 
         return x
 
@@ -134,36 +131,28 @@ class ResNetMulti(nn.Module):
         requires_grad is set to False in deeplab_resnet.py, therefore this function does not return
         any batchnorm parameter
         """
-        b = []
-
-        b.append(self.conv1)
-        b.append(self.bn1)
-        b.append(self.layer1)
-        b.append(self.layer2)
-        b.append(self.layer3)
-        b.append(self.layer4)
-
-        for i in range(len(b)):
-            for j in b[i].modules():
-                jj = 0
-                for k in j.parameters():
-                    jj += 1
-                    if k.requires_grad:
-                        yield k
+        layers = [
+            self.conv1,
+            self.bn1,
+            self.layer1,
+            self.layer2,
+            self.layer3,
+            self.layer4
+        ]
+        
+        for layer in layers:
+            for param in layer.parameters():
+                if param.requires_grad:
+                    yield param
 
     def get_10x_lr_params(self):
         """
         This generator returns all the parameters for the last layer of the net,
         which does the classification of pixel into classes
         """
-        b = []
-        if self.multi_level:
-            b.append(self.layer5.parameters())
-        b.append(self.layer6.parameters())
-
-        for j in range(len(b)):
-            for i in b[j]:
-                yield i
+        for param in self.aspp.parameters():
+            if param.requires_grad:
+                yield param
 
     def optim_parameters(self, lr):
         return [
@@ -172,12 +161,11 @@ class ResNetMulti(nn.Module):
         ]
 
 
-def get_deeplab_v2(num_classes=19, pretrain=True, pretrain_model_path='DeepLab_resnet_pretrained_imagenet.pth'):
+def get_deeplab_v2(num_classes, pretrain, pretrain_model_path):
     model = ResNetMulti(Bottleneck, [3, 4, 23, 3], num_classes)
 
     # Pretraining loading
     if pretrain:
-        logging.info('Deeplab pretraining loading...')
         saved_state_dict = torch.load(pretrain_model_path, weights_only=True)
 
         new_params = model.state_dict().copy()
@@ -185,5 +173,5 @@ def get_deeplab_v2(num_classes=19, pretrain=True, pretrain_model_path='DeepLab_r
             i_parts = i.split('.')
             new_params['.'.join(i_parts[1:])] = saved_state_dict[i]
         model.load_state_dict(new_params, strict=False)
-
+        
     return model

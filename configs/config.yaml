@@ -22,7 +22,7 @@ data:
     width: 512
   augment: true
   aug_prob: 1
-  aug_prob_one_of: 0.75
+  aug_prob_one_of: 0
   aug_names:
     RC:
       height: 512
@@ -32,7 +32,7 @@ data:
     RR: {}
 
 model:
-  model: "pidnet_s"
+  model: "deeplab_v2"
   checkpoint: null
   ignore_index: -1
   num_classes: 7
@@ -59,6 +59,9 @@ training:
       - 1.e-4
       - 1.e-3
     stdc1:
+      - 1.e-4
+      - 1.e-3
+    deeplab_v2:
       - 1.e-4
       - 1.e-3
   weight_decay: 1.e-4

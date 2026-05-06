@@ -6,7 +6,9 @@ import torch.optim as optim
 from torch.optim import lr_scheduler
 
 from src.dataset.dataset import LoveDA
+from src.losses.deeplab_v2 import DeepLabLoss
 from src.models.bisenet import BiSeNet
+from src.models.deeplab_v2 import get_deeplab_v2
 from src.models.stdc import STDC
 from src.train.pidnet import get_pidnet
 
@@ -28,9 +30,9 @@ def setup_rt_model(cfg, device, backbone_name=None):
     if cfg.training.weighted_loss:
         sem_kwargs['weight'] = LoveDA.get_class_weights(cfg.path.source, cfg.training.loss).to(device)
         
-        print(f"Using weighted loss")
+        logging.info("Using weighted loss")
     else:
-        print("Using unweighted loss")
+        logging.info("Using unweighted loss")
         
     if cfg.training.loss == "cross_entropy":
         weight = sem_kwargs.get('weight', None)
@@ -46,9 +48,16 @@ def setup_rt_model(cfg, device, backbone_name=None):
         base_criterion = FocalLoss(ignore_index=cfg.model.ignore_index, gamma=gamma, alpha=alpha)
     else:
         raise ValueError(f"Unsupported criterion: {cfg.training.loss}")
-        
+    
     # Model and loss initialization
-    if "bisenet" in model_name:
+    if "deeplab" in model_name:
+        pretrained_model_path = os.path.join(cfg.path.weights, f"{cfg.model.model}.pth")
+        model = get_deeplab_v2(
+            num_classes=cfg.model.num_classes, pretrain=True, pretrain_model_path=pretrained_model_path
+        )
+        param_groups = [group["params"] for group in model.optim_parameters(lr=0)] # Learning rate will be set later in the universal setup
+        criterion = DeepLabLoss(base_criterion)
+    elif "bisenet" in model_name:
         model = BiSeNet(cfg.model.num_classes, backbone_name)
         param_groups = model.get_param_groups()
         criterion = BiSeNetLoss(base_criterion)
