@@ -104,7 +104,7 @@ if __name__ == "__main__":
 
     # Load augmentations
     if cfg.data.augment:
-        augmentations = get_augmentations(cfg.data.aug_prob, cfg.data.aug_names)
+        augmentations = get_augmentations(cfg.data.aug_prob, cfg.data.aug_prob_one_of, cfg.data.aug_names)
     else:
         augmentations = get_nop_augmentation()
 

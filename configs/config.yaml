@@ -22,10 +22,14 @@ data:
     width: 512
   augment: true
   aug_prob: 1
+  aug_prob_one_of: 0.75
   aug_names:
     RC:
       height: 512
       width: 512
+    HF: {}
+    VF: {}
+    RR: {}
 
 model:
   model: "pidnet_s"
@@ -40,8 +44,8 @@ training:
   resume: false
   adaptation: null
   epochs: 20
-  loss: "cross_entropy"
-  weighted_loss: true
+  loss: "focal"
+  weighted_loss: false
   focal_gamma: 2.0
   optimizer: "AdamW"
   scheduler: "poly"
