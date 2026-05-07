@@ -8,7 +8,7 @@ from torch.optim import lr_scheduler
 
 from src.metrics.metrics import compute_iou
 from src.models.discriminator import FCDiscriminator
-from src.train.train_rt_model import evaluate_rt_model
+from src.train.train_model import evaluate_rt_model
 from src.utils.utils import save_checkpoint
 
 def adda_setup(cfg, device):

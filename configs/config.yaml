@@ -32,7 +32,7 @@ data:
     RR: {}
 
 model:
-  model: "deeplab_v2"
+  model: "pidnet_s"
   checkpoint: null
   ignore_index: -1
   num_classes: 7

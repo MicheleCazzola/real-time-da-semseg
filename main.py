@@ -1,15 +1,14 @@
 import logging
 import os
 import yaml
+import argparse
 from box import Box
 from datetime import datetime
-
-import argparse
 
 from src.dataset.dataset import LoveDA
 from src.dataset.augmentations import get_augmentations, get_nop_augmentation
 from src.metrics.resources import compute_performance_metrics
-from src.train.train_rt_model import train_rt_model, setup_rt_model
+from src.train.train_model import train_rt_model, setup_rt_model
 from src.train.adda import adda_setup, train_adda
 from src.utils.plot import plot_results
 from src.utils.utils import set_default_config, set_seed, get_num_workers, setup_logger, get_device, save_results
@@ -108,9 +107,6 @@ if __name__ == "__main__":
     else:
         augmentations = get_nop_augmentation()
 
-    # is_model_rt = cfg.model.model not in [ModelType.DEEPLAB_V2.value]
-
-    # if is_model_rt:
     match cfg.model.model:
         case ModelType.DEEPLAB_V2.value:
             bd_required = False
@@ -267,79 +263,3 @@ if __name__ == "__main__":
             save_to=os.path.join(output_dir, f"performance_metrics.json"),
             return_out=False,
         )
-
-    # else:
-    #     match cfg.model.model:
-    #         case ModelType.DEEPLAB_V2.value:
-    #             model, criterion, optimizer, scheduler = deeplab_v2_model_setup(cfg, device)
-
-    #             if cfg.training.train:
-    #                 trainset_source, trainloader_source = trainset_setup(
-    #                     cfg, cfg.path.source, g, seed_worker, num_workers, augmentations=augmentations
-    #                 )
-    #                 trainset_target, trainloader_target = trainset_setup(
-    #                     cfg, cfg.path.target, g, seed_worker, num_workers, augmentations=augmentations
-    #                 )
-    #                 validset, validloader = validset_setup(cfg, cfg.path.target, num_workers, g, seed_worker)
-
-    #                 chp_path = os.path.join(output_dir, cfg.model.checkpoint) if cfg.model.checkpoint else None
-    #                 new_chp_path = os.path.join(output_dir, f"{cfg.model.model}.pth.tar")
-
-    #                 train_losses, train_mious, train_ious = train_deeplab_v2(
-    #                     model,
-    #                     cfg.model.num_classes,
-    #                     trainloader_source,
-    #                     cfg.training.epochs,
-    #                     criterion,
-    #                     optimizer,
-    #                     scheduler,
-    #                     device,
-    #                     new_chp_path,
-    #                     cfg.training.resume,
-    #                     chp_path,
-    #                     log_frequency=10,
-    #                 )
-    #                 val_losses, val_mious, val_ious = evaluate_deeplab_v2(
-    #                     model,
-    #                     validloader,
-    #                     criterion,
-    #                     cfg.model.num_classes,
-    #                     device,
-    #                     new_chp_path,
-    #                     start_epoch=0,
-    #                     num_epochs=cfg.training.epochs,
-    #                     log_frequency=10,
-    #                 )
-
-    #                 save_results(
-    #                     os.path.join(output_dir, f"results.json"),
-    #                     train_losses=train_losses,
-    #                     train_mious=train_mious,
-    #                     train_ious=train_ious,
-    #                     val_losses=val_losses,
-    #                     val_mious=val_mious,
-    #                     val_ious=val_ious,
-    #                 )
-
-    #                 plot_results(
-    #                     dir_path=output_dir,
-    #                     id2label=id2label,
-    #                     main_losses={"train_losses": train_losses, "val_losses": val_losses},
-    #                     mean_ious={"train_mious": train_mious, "val_mious": val_mious},
-    #                     ious_per_class={"train_ious": train_ious, "val_ious": val_ious},
-    #                     train_losses=None,
-    #                     show=False,
-    #                 )
-
-    #             if cfg.training.measure:
-    #                 resource_metrics = compute_performance_metrics(
-    #                     model,
-    #                     args.iterations,
-    #                     cfg.data.dimensions.height,
-    #                     cfg.data.dimensions.width,
-    #                     device,
-    #                     save_to=os.path.join(output_dir, f"performance_metrics.json"),
-    #                     return_out=False,
-    #                 )
-    #         case _:
-    #             raise NotImplementedError(f"Model {cfg.model.model} not supported")
