@@ -1,4 +1,7 @@
 # Real Time Domain Adaptation in Semantic Segmentation
+
+**[Important Notice]**: this is the temporary branch for the refactor of the project, which is still in progress. However, most of the code is already available.
+
 Implementation and comparison of several deep learning methods and Convolutional Neural Networks to tackle the problem of domain adaptation in real-time semantic segmentation.
 
 ## Authors
