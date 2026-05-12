@@ -8,8 +8,14 @@ import gdown
 import numpy as np
 from box import Box
 import logging
+from functools import partial
 
-from src.utils.variables import device, categories
+from src.utils.variables import categories
+
+def seed_worker(_):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
 
 # Set seed for reproducibility
 def set_seed(seed=42):
@@ -25,15 +31,10 @@ def set_seed(seed=42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    def seed_worker(_):
-        worker_seed = torch.initial_seed() % 2**32
-        np.random.seed(worker_seed)
-        random.seed(worker_seed)
-
     g = torch.Generator()
     g.manual_seed(0)
     
-    return g, seed_worker
+    return g, partial(seed_worker)
 
 def setup_logger(output_dir):
     os.makedirs(output_dir, exist_ok=True)
@@ -60,15 +61,31 @@ def set_default_config(cfg, args):
             cfg[key] = args[key]
 
 # Checkpoint resume
-def resume_checkpoint(resume_path, model, optimizer=None, scheduler=None):
-    checkpoint = torch.load(resume_path)
+def load_checkpoint(chp_path, model, device, disc_model=None, optimizer=None, disc_optimizer=None, scheduler=None, disc_scheduler=None, epochs=None):
+    checkpoint = torch.load(chp_path, weights_only=False, map_location=device)
+    
     epoch = checkpoint['epoch']
     model.load_state_dict(checkpoint['model'])
+    
+    if disc_model is not None:
+        disc_model.load_state_dict(checkpoint['disc_model'])
     if optimizer is not None:
-      optimizer.load_state_dict(checkpoint['optimizer'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+    if disc_optimizer is not None:
+        disc_optimizer.load_state_dict(checkpoint['disc_optimizer'])
     if scheduler is not None:
-      scheduler.load_state_dict(checkpoint['scheduler'])
-    return epoch, model, optimizer, scheduler
+        scheduler.load_state_dict(checkpoint['scheduler'])
+    if disc_scheduler is not None:
+        disc_scheduler.load_state_dict(checkpoint['disc_scheduler'])
+        
+    best_miou = checkpoint.get('miou', None)
+    ious = checkpoint.get('ious', None)
+        
+    return {
+        "epoch": epoch,
+        "miou": best_miou,
+        "ious": ious
+    }
 
 # Checkpoint save
 def save_checkpoint(path, epoch, model, disc_model=None, optimizer=None, disc_optimizer=None, scheduler=None, disc_scheduler=None, miou=None, ious=None):
@@ -110,7 +127,7 @@ def get_num_workers(device):
     if device.type == 'cuda':
         return 0                # Colab environment -> Issues with multiple workers and CUDA, set to 0 for safe execution
     elif device.type == 'mps':
-        return min(2, num_cpus)                
+        return min(4, num_cpus)                
     else:
         return num_cpus // 2  # Use half of available CPUs for CPU training
 

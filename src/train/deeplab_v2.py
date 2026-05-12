@@ -7,7 +7,7 @@ from torch.optim import lr_scheduler
 
 from src.metrics.metrics import compute_iou
 from src.models.deeplab_v2 import get_deeplab_v2
-from src.utils.utils import save_checkpoint, resume_checkpoint
+from src.utils.utils import save_checkpoint, load_checkpoint
 
 def deeplab_v2_model_setup(cfg, device):
     pretrained_model_path = os.path.join(cfg.path.weights, f"{cfg.model.model}.pth")
@@ -29,7 +29,7 @@ def train_deeplab_v2(model, num_classes, trainloader, num_epochs, criterion, opt
     logging.info("DeeplabV2 - Training")
 
     if resume_training:
-        start_epoch, model, optimizer, scheduler = resume_checkpoint(resume_path, model, optimizer, scheduler)
+        start_epoch, model, optimizer, scheduler = load_checkpoint(resume_path, model, optimizer, scheduler)
         end_epoch = start_epoch + num_epochs
         
         logging.info(f"Resuming training from checkpoint: {resume_path}")
@@ -99,7 +99,7 @@ def evaluate_deeplab_v2(model, dataloader, criterion, num_classes, device, chp_p
     for epoch in range(start_epoch, start_epoch + num_epochs):
 
         chp_path_epoch = f"{chp_path.split('.pth.tar')[0]}_{epoch + 1}.pth.tar"
-        chp_epoch, model, _, _ = resume_checkpoint(chp_path_epoch, model)
+        chp_epoch, model, _, _ = load_checkpoint(chp_path_epoch, model)
         
         assert chp_epoch == epoch, f"Checkpoint epoch {chp_epoch} does not match expected epoch {epoch}"
 

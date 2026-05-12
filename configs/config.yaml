@@ -8,6 +8,7 @@ path:
   images: "images_png"
   masks: "masks_png"
   checkpoints: "models/checkpoints"
+  checkpoint_path: null
   weights: "models/pretrained_weights"
 
 data:
@@ -56,6 +57,9 @@ training:
       - 1.e-4
       - 1.e-3
     bisenet_v1_rt:
+      - 1.e-4
+      - 1.e-3
+    bisenet_v1:
       - 1.e-4
       - 1.e-3
     stdc1:

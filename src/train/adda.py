@@ -8,7 +8,7 @@ from torch.optim import lr_scheduler
 
 from src.metrics.metrics import compute_iou
 from src.models.discriminator import FCDiscriminator
-from src.train.train_model import evaluate_rt_model
+from src.train.train_model import evaluate_model
 from src.utils.utils import save_checkpoint
 
 def adda_setup(cfg, device):
@@ -189,7 +189,7 @@ def train_adda(
         train_epoch_ious = 100 * train_epoch_ious / data_len
 
         # Validation
-        val_loss, val_epoch_miou, val_epoch_ious = evaluate_rt_model(generator, gen_name, num_classes, validloader, criterion_gen, bd_required, epoch, num_epochs, device, log_frequency)
+        val_loss, val_epoch_miou, val_epoch_ious = evaluate_model(generator, gen_name, num_classes, validloader, criterion_gen, bd_required, epoch, num_epochs, device, log_frequency)
         
         train_losses_gen_source.append(float(train_loss_gen_source))
         val_losses.append(float(val_loss))

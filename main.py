@@ -8,7 +8,7 @@ from datetime import datetime
 from src.dataset.dataset import LoveDA
 from src.dataset.augmentations import get_augmentations, get_nop_augmentation
 from src.metrics.resources import compute_performance_metrics
-from src.train.train_model import train_rt_model, setup_rt_model
+from src.train.train_model import train_model, setup_model
 from src.train.adda import adda_setup, train_adda
 from src.utils.plot import plot_results
 from src.utils.utils import set_default_config, set_seed, get_num_workers, setup_logger, get_device, save_results
@@ -64,6 +64,7 @@ if __name__ == "__main__":
         '--iterations', type=int, default=1000, help='Number of iterations for performance measurement.'
     )
     parser.add_argument('--loss', type=str, help='Loss function to use for training.')
+    parser.add_argument('--checkpoint-path', type=str, help='Path to a checkpoint to resume training or for evaluation.')
     args = parser.parse_args()
 
     with open(args.from_config, 'r') as f:
@@ -148,7 +149,7 @@ if __name__ == "__main__":
         case _:
             raise NotImplementedError(f"Model {cfg.model.model} not supported")
 
-    model, criterion, optimizer, scheduler = setup_rt_model(cfg, device, backbone_name)
+    model, criterion, optimizer, scheduler, start_epoch, start_miou = setup_model(cfg, device, backbone_name)
 
     if cfg.training.train:
         trainset_source, trainloader_source = trainset_setup(
@@ -182,7 +183,7 @@ if __name__ == "__main__":
         )
 
         if cfg.training.adaptation is None:
-            train_result = train_rt_model(
+            train_result = train_model(
                 model,
                 cfg.model.model,
                 cfg.model.num_classes,
@@ -191,7 +192,9 @@ if __name__ == "__main__":
                 criterion,
                 optimizer,
                 scheduler,
+                start_epoch,
                 cfg.training.epochs,
+                start_miou,
                 bd_required=bd_required,
                 checkpoint_dir=output_dir,
                 device=device,

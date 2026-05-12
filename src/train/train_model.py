@@ -20,9 +20,9 @@ from src.losses.bondary import BondaryLoss
 from src.losses.pidnet import PIDNetLoss, PIDNetSemanticLoss
 
 from src.metrics.metrics import compute_iou
-from src.utils.utils import save_checkpoint
+from src.utils.utils import load_checkpoint, save_checkpoint
 
-def setup_rt_model(cfg, device, backbone_name=None):
+def setup_model(cfg, device, backbone_name=None):
     model_name = cfg.model.model.lower()
     
     # Semantic criterion setup
@@ -131,11 +131,18 @@ def setup_rt_model(cfg, device, backbone_name=None):
             scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.training.epochs, eta_min=cfg.training.eta_min)
         case _:
             raise NotImplementedError(f"Unsupported scheduler type: {cfg.training.scheduler}")
-
-    return model, criterion, optimizer, scheduler
+        
+    if cfg.path.checkpoint_path is not None:
+        loaded_checkpoint_info = load_checkpoint(cfg.path.checkpoint_path, model, device, optimizer=optimizer, scheduler=scheduler, epochs=cfg.training.epochs)
+        logging.info(f"Checkpoint loaded from {cfg.path.checkpoint_path} | Resuming from epoch {loaded_checkpoint_info['epoch']} | mIoU (%): {loaded_checkpoint_info.get('miou', 'N/A'):.2f}")
+    
+    start_epoch = loaded_checkpoint_info['epoch'] if cfg.path.checkpoint_path is not None else 0
+    start_miou = loaded_checkpoint_info.get('miou', None) if cfg.path.checkpoint_path is not None else None
+    
+    return model, criterion, optimizer, scheduler, start_epoch, start_miou
 
 @torch.no_grad()
-def evaluate_rt_model(model, model_name, num_classes, dataloader, criterion, bd_required, epoch, tot_epochs, device, log_frequency):
+def evaluate_model(model, model_name, num_classes, dataloader, criterion, bd_required, epoch, tot_epochs, device, log_frequency):
     logging.info(f"{model_name} - Evaluation | Epoch {epoch + 1}/{tot_epochs}")
     model.eval()
 
@@ -188,17 +195,18 @@ def evaluate_rt_model(model, model_name, num_classes, dataloader, criterion, bd_
         
     return tot_loss / data_len, 100 * miou / data_len, 100 * ious / data_len
 
-def train_rt_model(model, model_name, num_classes, trainloader, validloader, criterion, optimizer, scheduler, num_epochs, bd_required, checkpoint_dir, device, log_frequency):
+def train_model(model, model_name, num_classes, trainloader, validloader, criterion, optimizer, scheduler, start_epoch, end_epoch, start_miou, bd_required, checkpoint_dir, device, log_frequency):
     logging.info(f"{model_name} - Training")
-    logging.info(f"Training epochs: {num_epochs}")
+    
+    logging.info(f"Training epochs: {end_epoch} (from {start_epoch + 1} to {end_epoch})")
     
     train_losses, val_losses = [], []
     train_task_specific_losses = {}
     train_mious, val_mious = [], []
     train_ious, val_ious = [], []
-    best_val_miou, best_epoch = None, None
+    best_epoch, best_val_miou = start_epoch - 1, start_miou
 
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, end_epoch):
 
         data_len, tot_batches = 0, len(trainloader)
         train_loss, epoch_task_specific_losses = 0.0, {}
@@ -251,7 +259,7 @@ def train_rt_model(model, model_name, num_classes, trainloader, validloader, cri
 
             if (i + 1) % log_frequency == 0:
                 inner_losses_str = " | ".join([f"{k}: {v / data_len:.4f}" for k, v in epoch_task_specific_losses.items()])
-                logging.info(f"Epoch {epoch + 1}/{num_epochs} | Batch {i + 1}/{tot_batches} | Total Loss: {train_loss / data_len:.4f} | {inner_losses_str} | mIoU (%): {100 * train_epoch_miou / data_len:.2f}")
+                logging.info(f"Epoch {epoch + 1}/{end_epoch} | Batch {i + 1}/{tot_batches} | Total Loss: {train_loss / data_len:.4f} | {inner_losses_str} | mIoU (%): {100 * train_epoch_miou / data_len:.2f}")
 
         # Loss aggregation
         train_loss = train_loss / data_len
@@ -264,7 +272,7 @@ def train_rt_model(model, model_name, num_classes, trainloader, validloader, cri
         train_epoch_miou = 100 * train_epoch_miou / data_len
         train_epoch_ious = 100 * train_epoch_ious / data_len
 
-        val_loss, val_epoch_miou, val_epoch_ious = evaluate_rt_model(model, model_name, num_classes, validloader, criterion, bd_required, epoch, num_epochs, device, log_frequency)
+        val_loss, val_epoch_miou, val_epoch_ious = evaluate_model(model, model_name, num_classes, validloader, criterion, bd_required, epoch, end_epoch, device, log_frequency)
         
         train_losses.append(float(train_loss))
         val_losses.append(float(val_loss))
@@ -276,7 +284,7 @@ def train_rt_model(model, model_name, num_classes, trainloader, validloader, cri
         val_ious.append(val_epoch_ious.tolist())
         
         # Logging
-        logging.info(f"Epoch {epoch + 1}/{num_epochs} | Train Loss: {train_loss:.4f} | Train mIoU (%): {train_epoch_miou:.2f} | Val Loss: {val_loss:.4f} | Val mIoU (%): {val_epoch_miou:.2f}")
+        logging.info(f"Epoch {epoch + 1}/{end_epoch} | Train Loss: {train_loss:.4f} | Train mIoU (%): {train_epoch_miou:.2f} | Val Loss: {val_loss:.4f} | Val mIoU (%): {val_epoch_miou:.2f}")
         
         # Checkpointing
         if best_val_miou is None or val_epoch_miou > best_val_miou:
@@ -284,9 +292,9 @@ def train_rt_model(model, model_name, num_classes, trainloader, validloader, cri
             best_val_miou = val_epoch_miou
             best_epoch = epoch
             chp_path = os.path.join(checkpoint_dir, f"best_{model_name}_{epoch + 1}.pth.tar")
-            save_checkpoint(chp_path, epoch, model, optimizer=optimizer, scheduler=scheduler, miou=val_epoch_miou, ious=val_epoch_ious)
+            save_checkpoint(chp_path, epoch + 1, model, optimizer=optimizer, scheduler=scheduler, miou=val_epoch_miou, ious=val_epoch_ious)
             
-            if prev_best_epoch is not None:
+            if prev_best_epoch >= start_epoch:
                 prev_chp_path = os.path.join(checkpoint_dir, f"best_{model_name}_{prev_best_epoch + 1}.pth.tar")
                 if os.path.exists(prev_chp_path):
                     os.remove(prev_chp_path)
@@ -294,8 +302,8 @@ def train_rt_model(model, model_name, num_classes, trainloader, validloader, cri
         if scheduler is not None:
             scheduler.step()
             
-    last_chp_path = os.path.join(checkpoint_dir, f"last_{model_name}_{num_epochs}.pth.tar")
-    save_checkpoint(last_chp_path, epoch, model, optimizer=optimizer, scheduler=scheduler, miou=val_epoch_miou, ious=val_epoch_ious)
+    last_chp_path = os.path.join(checkpoint_dir, f"last_{model_name}_{end_epoch}.pth.tar")
+    save_checkpoint(last_chp_path, end_epoch, model, optimizer=optimizer, scheduler=scheduler, miou=val_epoch_miou, ious=val_epoch_ious)
     
     return {
         "train_losses": train_losses,
