@@ -303,8 +303,10 @@ def train_model(model, model_name, num_classes, trainloader, validloader, criter
             scheduler.step()
             
     last_chp_path = os.path.join(checkpoint_dir, f"last_{model_name}_{end_epoch}.pth.tar")
-    save_checkpoint(last_chp_path, end_epoch, model, optimizer=optimizer, scheduler=scheduler, miou=val_epoch_miou, ious=val_epoch_ious)
-    
+    last_miou = val_mious[-1] if len(val_mious) > 0 else None
+    last_ious = val_ious[-1] if len(val_ious) > 0 else None
+    save_checkpoint(last_chp_path, end_epoch, model, optimizer=optimizer, scheduler=scheduler, miou=last_miou, ious=last_ious)
+
     return {
         "train_losses": train_losses,
         "val_losses": val_losses,
