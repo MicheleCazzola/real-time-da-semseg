@@ -80,6 +80,13 @@ def setup_model(cfg, device, backbone_name=None):
         criterion = PIDNetLoss(sem_loss=sem_loss, bd_loss=bd_loss, ignore_index=cfg.model.ignore_index)
     else:
         raise ValueError(f"Model unsupported for universal setup: {model_name}")
+    
+    if cfg.path.pretrained_path is not None:
+        weights = torch.load(cfg.path.pretrained_path, map_location=device)
+        if "model" in weights:
+            weights = weights["model"]
+        model.load_state_dict(weights, strict=True)
+        logging.info(f"Pretrained weights loaded from {cfg.path.pretrained_path}")
         
     model = model.to(device)
     

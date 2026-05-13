@@ -106,7 +106,7 @@ def save_checkpoint(path, epoch, model, disc_model=None, optimizer=None, disc_op
     if miou is not None:
         checkpoint['miou'] = float(miou)
     if ious is not None:
-        checkpoint['ious'] = ious.tolist()
+        checkpoint['ious'] = ious.tolist() if isinstance(ious, torch.Tensor) else ious
         
     torch.save(checkpoint, path)
     

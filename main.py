@@ -65,6 +65,7 @@ if __name__ == "__main__":
     )
     parser.add_argument('--loss', type=str, help='Loss function to use for training.')
     parser.add_argument('--checkpoint-path', type=str, help='Path to a checkpoint to resume training or for evaluation.')
+    parser.add_argument('--pretrained-path', type=str, help='Path to pretrained weights for model initialization.')
     args = parser.parse_args()
 
     with open(args.from_config, 'r') as f:
@@ -218,7 +219,9 @@ if __name__ == "__main__":
                 disc_optimizer,
                 scheduler,
                 disc_scheduler,
+                start_epoch,
                 cfg.training.epochs,
+                start_miou,
                 bd_required=bd_required,
                 checkpoint_dir=output_dir,
                 device=device,

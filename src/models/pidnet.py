@@ -476,6 +476,7 @@ class PIDNet(nn.Module):
     ):
         super(PIDNet, self).__init__()
         self.augment = augment
+        self.io_scale_factor = 8
 
         # I Branch
         self.conv1 = nn.Sequential(
@@ -546,7 +547,7 @@ class PIDNet(nn.Module):
             self.seghead_p = SegmentHead(planes * 2, head_planes, num_classes)
             self.seghead_d = SegmentHead(planes * 2, planes, 1)
 
-        self.final_layer = SegmentHead(planes * 4, head_planes, num_classes)
+        self.final_layer = SegmentHead(planes * 4, head_planes, num_classes, scale_factor=self.io_scale_factor)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -599,9 +600,9 @@ class PIDNet(nn.Module):
         return layer
 
     def forward(self, x):
-
-        width_output = x.shape[-1] // 8
-        height_output = x.shape[-2] // 8
+    
+        width_input, width_output = x.shape[-1], x.shape[-1] // self.io_scale_factor
+        height_input, height_output = x.shape[-2], x.shape[-2] // self.io_scale_factor
 
         x = self.conv1(x)
         x = self.layer1(x)

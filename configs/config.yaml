@@ -10,6 +10,7 @@ path:
   checkpoints: "models/checkpoints"
   checkpoint_path: null
   weights: "models/pretrained_weights"
+  pretrained_path: null
 
 data:
   imagenet_mean: [0.485, 0.456, 0.406]
@@ -74,14 +75,14 @@ training:
   momentum: 0.9
 
 adda:
-  lambda_adv: 1.e-5
+  lambda_adv: 0.001
   adda_num_classes: 7
-  adda_optimizer: "AdamW"
-  adda_scheduler: "poly"
+  adda_optimizer: "Adam"
+  adda_scheduler: null
   adda_power: 0.9
   adda_eta_min: 1.e-6
   adda_learning_rate: 1.e-4
-  adda_weight_decay: 1.e-4
+  adda_weight_decay: 0
   adda_step_size: 10
   adda_gamma: 0.1
   adda_momentum: 0.9

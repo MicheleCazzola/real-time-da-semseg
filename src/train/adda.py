@@ -47,12 +47,12 @@ def adda_setup(cfg, device):
 
 def train_adda(
     generator, discriminator, gen_name, num_classes, lambda_adv, trainloader_source, trainloader_target, validloader, 
-    criterion_gen, criterion_disc, optimizer_gen, optimizer_disc, scheduler, scheduler_disc, num_epochs,
-    bd_required, checkpoint_dir, device, log_frequency
+    criterion_gen, criterion_disc, optimizer_gen, optimizer_disc, scheduler, scheduler_disc, start_epoch, end_epoch,
+    start_miou, bd_required, checkpoint_dir, device, log_frequency
 ):
     
     logging.info(f"{gen_name} - ADDA training")
-    logging.info(f"Training epochs: {num_epochs}")
+    logging.info(f"Training epochs: {end_epoch}")
     
     def get_main_output(outputs):
         if "pidnet" in gen_name.lower():
@@ -61,7 +61,7 @@ def train_adda(
             pred = outputs[0]
         else:
             pred = outputs
-        
+            
         return pred
 
     train_losses_gen_source, val_losses = [], []
@@ -69,9 +69,9 @@ def train_adda(
     adda_specific_losses = {"train_losses_gen_target": [], "train_losses_disc_source": [], "train_losses_disc_target": []}
     train_mious, val_mious = [], []
     train_ious, val_ious = [], []
-    best_val_miou, best_epoch = None, None
+    best_epoch, best_val_miou = start_epoch - 1, start_miou
 
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, end_epoch):
         
         # ADDA (source, target) data loaders
         # To refine as they have different lengths and we do not want to use
@@ -117,7 +117,7 @@ def train_adda(
             batch_loss_gen_source.backward()
             
             train_loss_gen_source += batch_loss_gen_source.item() * inputs_source.size(0)
-
+            
             # Train with target
             outputs_target = generator(inputs_target)
             pred_gen_target = get_main_output(outputs_target)
@@ -173,7 +173,7 @@ def train_adda(
 
             if (i + 1) % log_frequency == 0:
                 inner_losses_str = " | ".join([f"{k}: {v / data_len:.4f}" for k, v in epoch_task_specific_losses_gen_source.items()])
-                logging.info(f"Epoch {epoch + 1}/{num_epochs} | Batch {i + 1}/{tot_batches} | Train Loss Gen Source: {train_loss_gen_source / data_len:.4f} | Train Loss Gen Target: {epoch_adda_specific_losses['train_losses_gen_target'] / data_len:.4f} | Train Loss Disc Source: {epoch_adda_specific_losses['train_losses_disc_source'] / data_len:.4f} | Train Loss Disc Target: {epoch_adda_specific_losses['train_losses_disc_target'] / data_len:.4f} | Train mIoU (%): {100 * train_epoch_miou / data_len:.2f} | {inner_losses_str}")
+                logging.info(f"Epoch {epoch + 1}/{end_epoch} | Batch {i + 1}/{tot_batches} | Train Loss Gen Source: {train_loss_gen_source / data_len:.4f} | {inner_losses_str} | Train Loss Gen Target: {epoch_adda_specific_losses['train_losses_gen_target'] / data_len:.6f} | Train Loss Disc Source: {epoch_adda_specific_losses['train_losses_disc_source'] / data_len:.4f} | Train Loss Disc Target: {epoch_adda_specific_losses['train_losses_disc_target'] / data_len:.4f} | Train mIoU (%): {100 * train_epoch_miou / data_len:.2f}")
         
         # Loss aggregation
         train_loss_gen_source = train_loss_gen_source / data_len
@@ -189,7 +189,7 @@ def train_adda(
         train_epoch_ious = 100 * train_epoch_ious / data_len
 
         # Validation
-        val_loss, val_epoch_miou, val_epoch_ious = evaluate_model(generator, gen_name, num_classes, validloader, criterion_gen, bd_required, epoch, num_epochs, device, log_frequency)
+        val_loss, val_epoch_miou, val_epoch_ious = evaluate_model(generator, gen_name, num_classes, validloader, criterion_gen, bd_required, epoch, end_epoch, device, log_frequency)
         
         train_losses_gen_source.append(float(train_loss_gen_source))
         val_losses.append(float(val_loss))
@@ -203,7 +203,7 @@ def train_adda(
         val_ious.append(val_epoch_ious.tolist())
         
         # Logging
-        logging.info(f"Epoch {epoch + 1}/{num_epochs} | Train Loss Gen Source: {train_loss_gen_source:.4f} | Train Loss Gen Target: {epoch_adda_specific_losses['train_losses_gen_target']:.4f} | Train Loss Disc Source: {epoch_adda_specific_losses['train_losses_disc_source']:.4f} | Train Loss Disc Target: {epoch_adda_specific_losses['train_losses_disc_target']:.4f} | Train mIoU (%): {train_epoch_miou:.2f} | Val Loss: {val_loss:.4f} | Val mIoU (%): {val_epoch_miou:.2f}")
+        logging.info(f"Epoch {epoch + 1}/{end_epoch} | Train Loss Gen Source: {train_loss_gen_source:.4f} | Train Loss Gen Target: {epoch_adda_specific_losses['train_losses_gen_target']:.6f} | Train Loss Disc Source: {epoch_adda_specific_losses['train_losses_disc_source']:.4f} | Train Loss Disc Target: {epoch_adda_specific_losses['train_losses_disc_target']:.4f} | Train mIoU (%): {train_epoch_miou:.2f} | Val Loss: {val_loss:.4f} | Val mIoU (%): {val_epoch_miou:.2f}")
         
         # Checkpointing
         if best_val_miou is None or val_epoch_miou > best_val_miou:
@@ -211,9 +211,9 @@ def train_adda(
             best_val_miou = val_epoch_miou
             best_epoch = epoch
             chp_path = os.path.join(checkpoint_dir, f"best_{gen_name}_adda_{epoch + 1}.pth.tar")
-            save_checkpoint(chp_path, epoch, generator, disc_model=discriminator, optimizer=optimizer_gen, disc_optimizer=optimizer_disc, scheduler=scheduler, disc_scheduler=scheduler_disc, miou=val_epoch_miou, ious=val_epoch_ious)
+            save_checkpoint(chp_path, epoch + 1, generator, disc_model=discriminator, optimizer=optimizer_gen, disc_optimizer=optimizer_disc, scheduler=scheduler, disc_scheduler=scheduler_disc, miou=val_epoch_miou, ious=val_epoch_ious)
             
-            if prev_best_epoch is not None:
+            if prev_best_epoch >= start_epoch:
                 prev_chp_path = os.path.join(checkpoint_dir, f"best_{gen_name}_adda_{prev_best_epoch + 1}.pth.tar")
                 if os.path.exists(prev_chp_path):
                     os.remove(prev_chp_path)
@@ -223,8 +223,10 @@ def train_adda(
         if scheduler_disc is not None:
             scheduler_disc.step()
             
-    last_chp_path = os.path.join(checkpoint_dir, f"last_{gen_name}_adda_{num_epochs}.pth.tar")
-    save_checkpoint(last_chp_path, epoch, generator, disc_model=discriminator, optimizer=optimizer_gen, disc_optimizer=optimizer_disc, scheduler=scheduler, disc_scheduler=scheduler_disc, miou=val_epoch_miou, ious=val_epoch_ious)
+    last_chp_path = os.path.join(checkpoint_dir, f"last_{gen_name}_adda_{end_epoch}.pth.tar")
+    last_miou = val_mious[-1] if len(val_mious) > 0 else None
+    last_ious = val_ious[-1] if len(val_ious) > 0 else None
+    save_checkpoint(last_chp_path, epoch + 1, generator, disc_model=discriminator, optimizer=optimizer_gen, disc_optimizer=optimizer_disc, scheduler=scheduler, disc_scheduler=scheduler_disc, miou=last_miou, ious=last_ious)
     
     return {
         "train_losses": train_losses_gen_source,
