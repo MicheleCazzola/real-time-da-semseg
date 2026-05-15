@@ -55,8 +55,8 @@ training:
   eta_min: 1.e-6
   learning_rate: 
     pidnet_s: 
+      - 1.e-5
       - 1.e-4
-      - 1.e-3
     bisenet_v1_rt:
       - 1.e-4
       - 1.e-3
@@ -78,7 +78,7 @@ adda:
   lambda_adv: 0.001
   adda_num_classes: 7
   adda_optimizer: "Adam"
-  adda_scheduler: null
+  adda_scheduler: "poly"
   adda_power: 0.9
   adda_eta_min: 1.e-6
   adda_learning_rate: 1.e-4

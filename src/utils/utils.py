@@ -127,7 +127,7 @@ def get_num_workers(device):
     if device.type == 'cuda':
         return 0                # Colab environment -> Issues with multiple workers and CUDA, set to 0 for safe execution
     elif device.type == 'mps':
-        return min(4, num_cpus)                
+        return min(6, num_cpus // 2)                
     else:
         return num_cpus // 2  # Use half of available CPUs for CPU training
 

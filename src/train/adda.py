@@ -74,11 +74,17 @@ def train_adda(
     for epoch in range(start_epoch, end_epoch):
         
         # ADDA (source, target) data loaders
-        # To refine as they have different lengths and we do not want to use
-        # the same data twice in the same epoch for the larger dataset
-        data_stream = zip(trainloader_source, trainloader_target)
+        def infinite_iterator(dataloader):
+            while True:
+                for batch in dataloader:
+                    yield batch
+
+        iter_source = infinite_iterator(trainloader_source) if len(trainloader_source) < len(trainloader_target) else iter(trainloader_source)
+        iter_target = infinite_iterator(trainloader_target) if len(trainloader_target) < len(trainloader_source) else iter(trainloader_target)
+
+        data_stream = zip(iter_source, iter_target)
         
-        data_len, tot_batches = 0, min(len(trainloader_source), len(trainloader_target))
+        data_len, tot_batches = 0, max(len(trainloader_source), len(trainloader_target))
         train_loss_gen_source = 0.0
         epoch_task_specific_losses_gen_source, epoch_adda_specific_losses = {}, {"train_losses_gen_target": 0.0, "train_losses_disc_source": 0.0, "train_losses_disc_target": 0.0}
         train_epoch_miou, train_epoch_ious = 0.0, torch.zeros(num_classes)
