@@ -6,7 +6,7 @@ from torch import optim
 from torch.nn import functional as F
 from torch.optim import lr_scheduler
 
-from src.metrics.metrics import compute_iou
+from src.metrics.mean_iou import MeanIoU
 from src.models.discriminator import FCDiscriminator
 from src.train.train_model import evaluate_model
 from src.utils.utils import save_checkpoint
@@ -71,6 +71,7 @@ def train_adda(
     train_ious, val_ious = [], []
     best_epoch, best_val_miou = start_epoch - 1, start_miou
 
+    metric = MeanIoU(num_classes=num_classes).to(device)
     for epoch in range(start_epoch, end_epoch):
         
         # ADDA (source, target) data loaders
@@ -87,7 +88,7 @@ def train_adda(
         data_len, tot_batches = 0, max(len(trainloader_source), len(trainloader_target))
         train_loss_gen_source = 0.0
         epoch_task_specific_losses_gen_source, epoch_adda_specific_losses = {}, {"train_losses_gen_target": 0.0, "train_losses_disc_source": 0.0, "train_losses_disc_target": 0.0}
-        train_epoch_miou, train_epoch_ious = 0.0, torch.zeros(num_classes)
+        metric.reset()
 
         generator.train()
         discriminator.train()
@@ -122,18 +123,71 @@ def train_adda(
             batch_loss_gen_source, batch_task_specific_losses_gen_source = criterion_gen(outputs_source, gt_source)
             batch_loss_gen_source.backward()
             
+            # Retain grads
+            task_grads = [p.grad.detach() for p in generator.parameters() if p.grad is not None]
+            grad_norm_task = torch.norm(torch.stack([g.norm(2) for g in task_grads]))
+            old_grads = {p: p.grad.clone() for p in generator.parameters() if p.grad is not None}
+            
             train_loss_gen_source += batch_loss_gen_source.item() * inputs_source.size(0)
             
-            # Train with target
+            # Train with target
             outputs_target = generator(inputs_target)
             pred_gen_target = get_main_output(outputs_target)
+            
+            # ANALYTICAL TRACKING: 
+            # Tell PyTorch to retain gradients for these intermediate tensors (normally dropped)
+            pred_gen_target.retain_grad()  # Direct output of PIDNet (logits)
+            
             preds_target = F.softmax(pred_gen_target, dim=1)
+            preds_target.retain_grad()     # Softmax output (probabilities)
+            
             outputs_gen_target = discriminator(preds_target)
 
-            batch_loss_gen_target = lambda_adv * criterion_disc(outputs_gen_target, torch.zeros_like(outputs_gen_target))
-            batch_loss_gen_target.backward()
+            batch_loss_gen_target = criterion_disc(outputs_gen_target, torch.zeros_like(outputs_gen_target))
             
             epoch_adda_specific_losses["train_losses_gen_target"] += batch_loss_gen_target.item() * inputs_target.size(0)
+            
+            batch_loss_gen_target = lambda_adv * batch_loss_gen_target
+            batch_loss_gen_target.backward()
+            
+            grad_in_softmax = preds_target.grad.norm(2).item() if preds_target.grad is not None else 0.0
+            grad_out_softmax = pred_gen_target.grad.norm(2).item() if pred_gen_target.grad is not None else 0.0
+            
+            print(f"\n{'='*50}")
+            print(f"--- ANALYTICAL PROPAGATION ANALYSIS (Iter {i+1}) ---")
+            print(f"1. Gradient from Disc (on Probabilities): {grad_in_softmax:.6f}")
+            print(f"2. Post-Softmax Gradient (on PIDNet Logits): {grad_out_softmax:.6f}")
+            if grad_in_softmax > 0:
+                print(f"-> Survival through Softmax Jacobian: {(grad_out_softmax/grad_in_softmax)*100:.2f}%")
+            
+            final_layer_grad = layer1_grad = None
+            for name, p in generator.named_parameters():
+                if 'final_layer.conv2.weight' in name and p.grad is not None:
+                    adv_g = p.grad.detach() - old_grads[p] if p in old_grads else p.grad.detach()
+                    final_layer_grad = adv_g.norm(2).item()
+                if 'layer1.0.conv1.weight' in name and p.grad is not None:
+                    adv_g = p.grad.detach() - old_grads[p] if p in old_grads else p.grad.detach()
+                    layer1_grad = adv_g.norm(2).item()
+
+            if final_layer_grad is not None and layer1_grad is not None:
+                print(f"\n3. Adv Magnitude at Head (final_layer.conv2): {final_layer_grad:.6f}")
+                print(f"4. Adv Magnitude at Base (layer1.0.conv1): {layer1_grad:.6f}")
+                if final_layer_grad > 0:
+                    print(f"-> Structural survival through PIDNet: {(layer1_grad/final_layer_grad)*100:.4f}%")
+                else:
+                    print("\n4. Could not compute structural survival (negative or zero gradient at final layer)")
+            else:
+                print("\n3. Could not compute structural survival (missing gradients in key layers)")
+            print(f"{'='*50}\n")
+
+            # Compute adversarial gradient norms
+            adv_grads = [(p.grad.detach() - old_grads[p]) if p in old_grads else p.grad.detach() for p in generator.parameters() if p.grad is not None]
+            grad_norm_adv = torch.norm(torch.stack([g.norm(2) for g in adv_grads]))
+            
+            # Compute total gradient norms
+            grad_norm_total = torch.norm(torch.stack([p.grad.detach().norm(2) for p in generator.parameters() if p.grad is not None]))
+            
+            print(f"Iter {i+1} | Grad Norm Task: {grad_norm_task:.4f} | Grad Norm Adv: {grad_norm_adv:.4f} | Grad Norm Total: {grad_norm_total:.4f}")
 
             # ===== Train discriminator =====
             # Unfreeze discriminator
@@ -172,14 +226,13 @@ def train_adda(
                 if task not in epoch_task_specific_losses_gen_source:
                     epoch_task_specific_losses_gen_source[task] = 0.0
                 epoch_task_specific_losses_gen_source[task] += task_loss.item() * inputs_source.size(0)
-                
-            batch_miou, batch_ious = compute_iou(pred_gen_source, masks_source, num_classes)
-            train_epoch_miou += batch_miou.item() * inputs_source.size(0)
-            train_epoch_ious += batch_ious.cpu() * inputs_source.size(0)
+            
+            metric.update(pred_gen_source, masks_source)
+            current_miou, _ = metric.compute()
 
             if (i + 1) % log_frequency == 0:
                 inner_losses_str = " | ".join([f"{k}: {v / data_len:.4f}" for k, v in epoch_task_specific_losses_gen_source.items()])
-                logging.info(f"Epoch {epoch + 1}/{end_epoch} | Batch {i + 1}/{tot_batches} | Train Loss Gen Source: {train_loss_gen_source / data_len:.4f} | {inner_losses_str} | Train Loss Gen Target: {epoch_adda_specific_losses['train_losses_gen_target'] / data_len:.6f} | Train Loss Disc Source: {epoch_adda_specific_losses['train_losses_disc_source'] / data_len:.4f} | Train Loss Disc Target: {epoch_adda_specific_losses['train_losses_disc_target'] / data_len:.4f} | Train mIoU (%): {100 * train_epoch_miou / data_len:.2f}")
+                logging.info(f"Epoch {epoch + 1}/{end_epoch} | Batch {i + 1}/{tot_batches} | Train Loss Gen Source: {train_loss_gen_source / data_len:.4f} | {inner_losses_str} | Train Loss Gen Target: {epoch_adda_specific_losses['train_losses_gen_target'] / data_len:.6f} | Train Loss Disc Source: {epoch_adda_specific_losses['train_losses_disc_source'] / data_len:.4f} | Train Loss Disc Target: {epoch_adda_specific_losses['train_losses_disc_target'] / data_len:.4f} | Train mIoU (%): {100 * current_miou.item():.2f}")
         
         # Loss aggregation
         train_loss_gen_source = train_loss_gen_source / data_len
@@ -191,8 +244,9 @@ def train_adda(
                 train_task_specific_losses_gen_source[f"train_losses_{task}"] = []
 
         # mIoU and IoU aggregation
-        train_epoch_miou = 100 * train_epoch_miou / data_len
-        train_epoch_ious = 100 * train_epoch_ious / data_len
+        train_epoch_miou, train_epoch_ious = map(lambda x: x * 100, metric.compute())
+        train_epoch_miou = train_epoch_miou.item()
+        train_epoch_ious = train_epoch_ious.tolist()
 
         # Validation
         val_loss, val_epoch_miou, val_epoch_ious = evaluate_model(generator, gen_name, num_classes, validloader, criterion_gen, bd_required, epoch, end_epoch, device, log_frequency)
@@ -203,10 +257,10 @@ def train_adda(
             train_task_specific_losses_gen_source[f"train_losses_{task}"].append(float(task_loss))
         for adda_loss, adda_loss_value in epoch_adda_specific_losses.items():
             adda_specific_losses[adda_loss].append(float(adda_loss_value))
-        train_mious.append(float(train_epoch_miou))
-        val_mious.append(float(val_epoch_miou))
-        train_ious.append(train_epoch_ious.tolist())
-        val_ious.append(val_epoch_ious.tolist())
+        train_mious.append(train_epoch_miou)
+        val_mious.append(val_epoch_miou)
+        train_ious.append(train_epoch_ious)
+        val_ious.append(val_epoch_ious)
         
         # Logging
         logging.info(f"Epoch {epoch + 1}/{end_epoch} | Train Loss Gen Source: {train_loss_gen_source:.4f} | Train Loss Gen Target: {epoch_adda_specific_losses['train_losses_gen_target']:.6f} | Train Loss Disc Source: {epoch_adda_specific_losses['train_losses_disc_source']:.4f} | Train Loss Disc Target: {epoch_adda_specific_losses['train_losses_disc_target']:.4f} | Train mIoU (%): {train_epoch_miou:.2f} | Val Loss: {val_loss:.4f} | Val mIoU (%): {val_epoch_miou:.2f}")
