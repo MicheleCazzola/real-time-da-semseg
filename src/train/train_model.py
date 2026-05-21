@@ -173,15 +173,14 @@ def evaluate_model(model, model_name, num_classes, dataloader, criterion, bd_req
             outputs = model(inputs)
             
             # Loss extraction
-            fallback_device = torch.device("cpu") if device.type == "cuda" else device
             if "pidnet" in model_name.lower():
                 # PIDNetLoss expects ground truth as tuples if boundary is strictly needed
-                loss_res = criterion([out.to(fallback_device) for out in outputs], (masks.to(fallback_device), boundaries.to(fallback_device)) if bd_required else (masks.to(fallback_device), None))
+                loss_res = criterion(outputs, (masks, boundaries) if bd_required else (masks, None))
             else:
-                loss_res = criterion([out.to(fallback_device) for out in outputs], masks.to(fallback_device))
+                loss_res = criterion(outputs, masks)
                 
             # Handle scalar (BiSeNet/STDC eval mode) or tuple (PIDNet)
-            loss = (loss_res[0] if isinstance(loss_res, tuple) else loss_res).to(device)
+            loss = loss_res[0] if isinstance(loss_res, tuple) else loss_res
             
             tot_loss += loss.item() * inputs.size(0)
             data_len += inputs.size(0)
@@ -245,9 +244,7 @@ def train_model(model, model_name, num_classes, trainloader, validloader, criter
             outputs = model(inputs)
             
             # Loss unpacking
-            fallback_device = torch.device("cpu") if device.type == "cuda" else device
-            batch_loss, batch_task_specific_losses = criterion([out.to(fallback_device) for out in outputs], [g.to(fallback_device) for g in gt])
-            batch_loss = batch_loss.to(device)
+            batch_loss, batch_task_specific_losses = criterion(outputs, gt)
             
             train_loss += batch_loss.item() * inputs.size(0)
             

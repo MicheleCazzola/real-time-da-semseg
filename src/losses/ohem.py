@@ -12,7 +12,12 @@ class OHEMCrossEntropy(nn.Module):
 
     def forward(self, score, target):
         
-        # 2d cross-entropy
+        if score.ndim == 4:
+            score = score.permute(0, 2, 3, 1).contiguous().view(-1, score.size(1))
+        if target.ndim == 3:
+            target = target.view(-1)
+        
+        # Cross-entropy loss for each pixel
         pixel_losses = F.cross_entropy(
             score, 
             target, 

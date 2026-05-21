@@ -14,7 +14,11 @@ class FocalLoss(nn.Module):
         self.alpha = alpha
 
     def forward(self, score, target):
-
+        if score.ndim == 4:
+            score = score.permute(0, 2, 3, 1).contiguous().view(-1, score.size(1))
+        if target.ndim == 3:
+            target = target.view(-1)
+            
         ce_loss = F.cross_entropy(score, target, reduction='none', ignore_index=self.ignore_index)
         
         pt = torch.exp(-ce_loss)

@@ -49,8 +49,8 @@ class PIDNetSemanticLoss(nn.Module):
             case SemanticLoss.OHEM.value:
                 criterion = OHEMCrossEntropy(
                     ignore_index=self.ignore_index,
-                    thres=kwargs.get('ohem_thres', 0.7),
-                    min_kept=kwargs.get('ohem_min_kept', 100000),
+                    thres=kwargs["ohem_threshold"],
+                    min_kept=kwargs["ohem_keep"],
                     weight=kwargs.get('weight', None)
                 )
             case SemanticLoss.FOCAL.value:
@@ -72,6 +72,10 @@ class PIDNetSemanticLoss(nn.Module):
         
         criterions = self.criterion if isinstance(self.criterion, list) else [self.criterion] * len(score)
 
+        score = [s.permute(0, 2, 3, 1).contiguous().view(-1, s.size(1)) for s in score if s.ndim == 4]
+        if target.ndim == 3:
+            target = target.view(-1)
+        
         if len(balance_weights) == len(score):
             return sum([w * criterion(x, target) for (w, x, criterion) in zip(balance_weights, score, criterions)])
         if len(score) == 1:
