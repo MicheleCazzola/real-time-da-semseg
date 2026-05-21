@@ -48,6 +48,8 @@ training:
   epochs: 20
   loss: "cross_entropy"
   weighted_loss: false
+  ohem_keep: 32768
+  ohem_threshold: 0.8
   focal_gamma: 2.0
   optimizer: "AdamW"
   scheduler: "poly"
