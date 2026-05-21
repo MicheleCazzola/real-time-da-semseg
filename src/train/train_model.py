@@ -19,7 +19,7 @@ from src.losses.bisenet import BiSeNetLoss
 from src.losses.bondary import BondaryLoss
 from src.losses.pidnet import PIDNetLoss, PIDNetSemanticLoss
 
-from src.metrics.metrics import compute_iou
+from src.metrics.mean_iou import MeanIoU
 from src.utils.utils import load_checkpoint, save_checkpoint
 
 def setup_model(cfg, device, backbone_name=None):
@@ -155,52 +155,56 @@ def evaluate_model(model, model_name, num_classes, dataloader, criterion, bd_req
 
     tot_loss = 0.0
     data_len, tot_batches = 0, len(dataloader)
-    miou, ious = 0.0, torch.zeros(num_classes)
+    metric = MeanIoU(num_classes=num_classes).to(device)
 
     for i, batch in enumerate(dataloader):
-        for idx in range(len(batch)):
-            batch[idx] = batch[idx].to(device)
+        try:
+            for idx in range(len(batch)):
+                batch[idx] = batch[idx].to(device)
+                    
+            if bd_required:
+                inputs, gt = batch[0], batch[1:]
+                masks, boundaries = gt[0], gt[1]
+            else:
+                inputs, gt = batch[0], batch[1]
+                masks = gt
+
+            # Forward pass
+            outputs = model(inputs)
+            
+            # Loss extraction
+            if "pidnet" in model_name.lower():
+                # PIDNetLoss expects ground truth as tuples if boundary is strictly needed
+                loss_res = criterion(outputs, (masks, boundaries) if bd_required else (masks, None))
+            else:
+                loss_res = criterion(outputs, masks)
                 
-        if bd_required:
-            inputs, gt = batch[0], batch[1:]
-            masks, boundaries = gt[0], gt[1]
-        else:
-            inputs, gt = batch[0], batch[1]
-            masks = gt
-
-        data_len += inputs.size(0)
-
-        # Forward pass
-        outputs = model(inputs)
-        
-        # Loss extraction
-        if "pidnet" in model_name.lower():
-            # PIDNetLoss expects ground truth as tuples if boundary is strictly needed
-            loss_res = criterion(outputs, (masks, boundaries) if bd_required else (masks, None))
-        else:
-            loss_res = criterion(outputs, masks)
+            # Handle scalar (BiSeNet/STDC eval mode) or tuple (PIDNet corrected)
+            loss = loss_res[0] if isinstance(loss_res, tuple) else loss_res
             
-        # Handle scalar (BiSeNet/STDC eval mode) or tuple (PIDNet corrected)
-        loss = loss_res[0] if isinstance(loss_res, tuple) else loss_res
-        
-        tot_loss += loss.item() * inputs.size(0)
-        
-        # Pred Extraction (mIoU)
-        if "pidnet" in model_name.lower():
-            pred = outputs[1] if isinstance(outputs, (list, tuple)) else outputs
-        elif isinstance(outputs, (list, tuple)):
-            pred = outputs[0]
-        else:
-            pred = outputs
+            tot_loss += loss.item() * inputs.size(0)
+            data_len += inputs.size(0)
             
-        batch_miou, batch_ious = compute_iou(pred, masks, num_classes)
-        miou += batch_miou.item() * inputs.size(0)
-        ious += batch_ious.cpu() * inputs.size(0)
+            # Pred Extraction (mIoU)
+            if "pidnet" in model_name.lower():
+                pred = outputs[1] if isinstance(outputs, (list, tuple)) else outputs
+            elif isinstance(outputs, (list, tuple)):
+                pred = outputs[0]
+            else:
+                pred = outputs
+                
+            metric.update(pred, masks)
+            current_miou, _ = metric.compute()
+            
+        except RuntimeError as e:
+            logging.error(f"Runtime error during evaluation at epoch {epoch + 1}, batch {i + 1}/{tot_batches}: {e}. Skipping this batch.")
         
         if (i + 1) % log_frequency == 0:
-            logging.info(f"Epoch {epoch + 1}/{tot_epochs} | Batch {i + 1}/{tot_batches} | Loss: {tot_loss / data_len:.4f} | mIoU (%): {100 * miou / data_len:.2f}")
+            logging.info(f"Epoch {epoch + 1}/{tot_epochs} | Batch {i + 1}/{tot_batches} | Loss: {tot_loss / data_len:.4f} | mIoU (%): {100 * current_miou.item():.2f}")
         
-    return tot_loss / data_len, 100 * miou / data_len, 100 * ious / data_len
+    miou, ious = map(lambda x: 100 * x, metric.compute())
+    
+    return tot_loss / data_len, miou.item(), ious.tolist()
 
 def train_model(model, model_name, num_classes, trainloader, validloader, criterion, optimizer, scheduler, start_epoch, end_epoch, start_miou, bd_required, checkpoint_dir, device, log_frequency):
     logging.info(f"{model_name} - Training")
@@ -213,14 +217,15 @@ def train_model(model, model_name, num_classes, trainloader, validloader, criter
     train_ious, val_ious = [], []
     best_epoch, best_val_miou = start_epoch - 1, start_miou
 
+    metric = MeanIoU(num_classes=num_classes).to(device)
     for epoch in range(start_epoch, end_epoch):
 
         data_len, tot_batches = 0, len(trainloader)
         train_loss, epoch_task_specific_losses = 0.0, {}
-        train_epoch_miou, train_epoch_ious = 0.0, torch.zeros(num_classes)
         
         model.train()
 
+        metric.reset()
         for i, batch in enumerate(trainloader):
             for idx in range(len(batch)):
                 batch[idx] = batch[idx].to(device)
@@ -259,14 +264,13 @@ def train_model(model, model_name, num_classes, trainloader, validloader, criter
                 preds = outputs[0]
             else:
                 preds = outputs
-                
-            batch_miou, batch_ious = compute_iou(preds, masks, num_classes)
-            train_epoch_miou += batch_miou.item() * inputs.size(0)
-            train_epoch_ious += batch_ious.cpu() * inputs.size(0)
+            
+            metric.update(preds, masks)
+            current_miou, _ = metric.compute()
 
             if (i + 1) % log_frequency == 0:
                 inner_losses_str = " | ".join([f"{k}: {v / data_len:.4f}" for k, v in epoch_task_specific_losses.items()])
-                logging.info(f"Epoch {epoch + 1}/{end_epoch} | Batch {i + 1}/{tot_batches} | Total Loss: {train_loss / data_len:.4f} | {inner_losses_str} | mIoU (%): {100 * train_epoch_miou / data_len:.2f}")
+                logging.info(f"Epoch {epoch + 1}/{end_epoch} | Batch {i + 1}/{tot_batches} | Total Loss: {train_loss / data_len:.4f} | {inner_losses_str} | mIoU (%): {100 * current_miou.item():.2f}")
 
         # Loss aggregation
         train_loss = train_loss / data_len
@@ -276,8 +280,9 @@ def train_model(model, model_name, num_classes, trainloader, validloader, criter
                 train_task_specific_losses[f"train_losses_{task}"] = []
                 
         # mIoU and IoU aggregation
-        train_epoch_miou = 100 * train_epoch_miou / data_len
-        train_epoch_ious = 100 * train_epoch_ious / data_len
+        train_epoch_miou, train_epoch_ious = map(lambda x: x * 100, metric.compute())
+        train_epoch_miou = train_epoch_miou.item()
+        train_epoch_ious = train_epoch_ious.tolist()
 
         val_loss, val_epoch_miou, val_epoch_ious = evaluate_model(model, model_name, num_classes, validloader, criterion, bd_required, epoch, end_epoch, device, log_frequency)
         
@@ -285,10 +290,10 @@ def train_model(model, model_name, num_classes, trainloader, validloader, criter
         val_losses.append(float(val_loss))
         for task, task_loss in epoch_task_specific_losses.items():
             train_task_specific_losses[f"train_losses_{task}"].append(float(task_loss))
-        train_mious.append(float(train_epoch_miou))
-        val_mious.append(float(val_epoch_miou))
-        train_ious.append(train_epoch_ious.tolist())
-        val_ious.append(val_epoch_ious.tolist())
+        train_mious.append(train_epoch_miou)
+        val_mious.append(val_epoch_miou)
+        train_ious.append(train_epoch_ious)
+        val_ious.append(val_epoch_ious)
         
         # Logging
         logging.info(f"Epoch {epoch + 1}/{end_epoch} | Train Loss: {train_loss:.4f} | Train mIoU (%): {train_epoch_miou:.2f} | Val Loss: {val_loss:.4f} | Val mIoU (%): {val_epoch_miou:.2f}")

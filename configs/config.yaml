@@ -4,7 +4,7 @@ path:
   train_dir: "Train"
   val_dir: "Val"
   source: "Urban"
-  target: "Urban"
+  target: "Rural"
   images: "images_png"
   masks: "masks_png"
   checkpoints: "models/checkpoints"
@@ -46,7 +46,7 @@ training:
   resume: false
   adaptation: null
   epochs: 20
-  loss: "focal"
+  loss: "cross_entropy"
   weighted_loss: false
   focal_gamma: 2.0
   optimizer: "AdamW"
@@ -55,8 +55,8 @@ training:
   eta_min: 1.e-6
   learning_rate: 
     pidnet_s: 
-      - 1.e-5
       - 1.e-4
+      - 1.e-3
     bisenet_v1_rt:
       - 1.e-4
       - 1.e-3
@@ -75,14 +75,14 @@ training:
   momentum: 0.9
 
 adda:
-  lambda_adv: 0.001
+  lambda_adv: 0.01
   adda_num_classes: 7
   adda_optimizer: "Adam"
   adda_scheduler: "poly"
   adda_power: 0.9
   adda_eta_min: 1.e-6
   adda_learning_rate: 1.e-4
-  adda_weight_decay: 0
+  adda_weight_decay: 5.e-3
   adda_step_size: 10
   adda_gamma: 0.1
   adda_momentum: 0.9

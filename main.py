@@ -5,10 +5,15 @@ import argparse
 from box import Box
 from datetime import datetime
 
+import torch
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
+
 from src.dataset.dataset import LoveDA
 from src.dataset.augmentations import get_augmentations, get_nop_augmentation
 from src.metrics.resources import compute_performance_metrics
-from src.train.train_model import train_model, setup_model
+from src.train.adda_multi import adda_multi_setup, train_adda_multi
+from src.train.train_model import train_model, setup_model, evaluate_model
 from src.train.adda import adda_setup, train_adda
 from src.utils.plot import plot_results
 from src.utils.utils import set_default_config, set_seed, get_num_workers, setup_logger, get_device, save_results
@@ -236,6 +241,40 @@ if __name__ == "__main__":
                     }
                 }
             )
+        elif cfg.training.adaptation == AdaptationMethod.ADDA_MULTI.value:
+            discriminators, criterions_disc, disc_optimizers, disc_schedulers = adda_multi_setup(cfg, device)
+            train_result = train_adda_multi(
+                model,
+                discriminators,
+                cfg.model.model,
+                cfg.model.num_classes,
+                cfg.adda.lambda_adv,
+                trainloader_source,
+                trainloader_target,
+                validloader,
+                criterion,
+                criterions_disc,
+                optimizer,
+                disc_optimizers,
+                scheduler,
+                disc_schedulers,
+                start_epoch,
+                cfg.training.epochs,
+                start_miou,
+                bd_required=bd_required,
+                checkpoint_dir=output_dir,
+                device=device,
+                log_frequency=10,
+            )
+            train_specific_losses = make_train_specific_losses(train_result)
+            train_specific_losses.update(
+                {
+                    "discriminator": {
+                        "train_losses_adda_disc_source": train_result.get("train_losses_disc_source", []),
+                        "train_losses_adda_disc_target": train_result.get("train_losses_disc_target", []),
+                    }
+                }
+            )
         elif cfg.training.adaptation == AdaptationMethod.DACS.value:
             raise NotImplementedError("DACS not integrated yet")
         else:
@@ -258,6 +297,20 @@ if __name__ == "__main__":
             train_losses=train_specific_losses,
             show=False,
         )
+    elif cfg.training.evaluate:
+        validset, validloader = validset_setup(
+            cfg,
+            cfg.path.target,
+            num_workers,
+            g,
+            seed_worker,
+            reduce_factor=args.reduce_factor,
+            boundaries=bd_required,
+        )
+
+        loss, miou, ious = evaluate_model(model, cfg.model.model, cfg.model.num_classes, validloader, criterion, bd_required, -1, 0, device, 1)
+        
+        save_results(os.path.join(output_dir, f"results.json"), val_loss=loss, val_miou=miou, val_ious=ious)
 
     if cfg.training.measure:
         resource_metrics = compute_performance_metrics(
