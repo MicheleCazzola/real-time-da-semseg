@@ -12,13 +12,21 @@ from src.train.pidnet import evaluate_pidnet
 from src.train.stdc import evaluate_stdc
 
 
-def trainset_setup(cfg, domain, g, seed_worker, num_workers, augmentations=A.NoOp(p=1), boundaries=False, reduce_factor=1):
+def trainset_setup(cfg, domain, g, seed_worker, num_workers, augmentations=A.Compose([]), boundaries=False, reduce_factor=1):
+    
+    downscale = (
+        A.Resize(cfg.data.downscale["height"], cfg.data.downscale["width"], p=1)
+        if cfg.data.downscale is not None else A.NoOp()
+    )
+    
     train_transform = A.Compose([
         A.Normalize(mean=cfg.data.imagenet_mean, std=cfg.data.imagenet_std, p=1, max_pixel_value=255),
+        downscale,
         augmentations,
         A.Resize(cfg.data.resize["height"], cfg.data.resize["width"], p=1),
         A.ToTensorV2(transpose_mask=True)
     ])
+    
     train_root = os.path.join(cfg.path.root, cfg.path.train_dir)
     train_dataset = LoveDA(train_root, cfg.path.images, cfg.path.masks, directories=domain, transforms=train_transform, bd=boundaries, reduce_factor=reduce_factor)
     train_loader = DataLoader(

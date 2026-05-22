@@ -19,12 +19,15 @@ data:
   dimensions:
     height: 1024
     width: 1024
+  downscale: 
+    height: 768
+    width: 768
   resize:
     height: 512
     width: 512
   augment: true
   aug_prob: 1
-  aug_prob_one_of: 0
+  aug_prob_one_of: 0.5
   aug_names:
     RC:
       height: 512

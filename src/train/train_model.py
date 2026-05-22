@@ -238,10 +238,15 @@ def train_model(model, model_name, num_classes, trainloader, validloader, criter
                 masks = gt
             
             data_len += inputs.size(0)
+            
+            print(inputs.shape, masks.shape)
 
             # Forward pass
             optimizer.zero_grad()
             outputs = model(inputs)
+            
+            for out in outputs:
+                print(out.shape)
             
             # Loss unpacking
             batch_loss, batch_task_specific_losses = criterion(outputs, gt)

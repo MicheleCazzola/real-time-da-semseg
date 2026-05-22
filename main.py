@@ -112,7 +112,7 @@ if __name__ == "__main__":
     if cfg.data.augment:
         augmentations = get_augmentations(cfg.data.aug_prob, cfg.data.aug_prob_one_of, cfg.data.aug_names)
     else:
-        augmentations = get_nop_augmentation()
+        augmentations = None
 
     match cfg.model.model:
         case ModelType.DEEPLAB_V2.value:
