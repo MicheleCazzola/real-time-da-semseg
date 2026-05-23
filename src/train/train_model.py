@@ -66,7 +66,7 @@ def setup_model(cfg, device, backbone_name=None):
         model = STDC(backbone_name, cfg.model.num_classes, pretrain_model=pretrained_model, use_boundary_8=True)
         param_groups = model.get_param_groups()
         detail_criterion = DetailAggregateLoss()
-        criterion = STDCLoss(sem_loss=base_criterion, bd_loss=detail_criterion)
+        criterion = STDCLoss(sem_loss=base_criterion, bd_loss=detail_criterion, ignore_index=cfg.model.ignore_index)
     elif "pidnet" in model_name:
         pretrained_weights = os.path.join(cfg.path.weights, f"{cfg.model.model}.pth")
         model, param_groups = get_pidnet(cfg.model.model, cfg.model.num_classes, pretrained_weights, imgnet_pretrained=True)

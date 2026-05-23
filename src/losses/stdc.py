@@ -32,7 +32,12 @@ class DetailAggregateLoss(nn.Module):
         
         return loss.mean()
 
-    def forward(self, boundary_logits, gtmasks):
+    def forward(self, boundary_logits, gtmasks, ignore_index=-1):
+
+        # Neutralize the ignore_index so Laplacian doesn't detect falsified boundaries
+        gtmasks = gtmasks.clone()
+        valid_mask = (gtmasks != ignore_index).unsqueeze(1).type(torch.FloatTensor).to(gtmasks.device)
+        gtmasks[gtmasks == ignore_index] = 0
 
         # boundary_logits = boundary_logits.unsqueeze(1)
         boundary_targets = F.conv2d(gtmasks.unsqueeze(1).type(torch.FloatTensor), self.laplacian_kernel, padding=1)
@@ -76,15 +81,22 @@ class DetailAggregateLoss(nn.Module):
             )
         
         boundary_targets_pyramid = boundary_targets_pyramid.to(boundary_logits.device)
-        bce_loss = F.binary_cross_entropy_with_logits(boundary_logits, boundary_targets_pyramid)
-        dice_loss = self.dice_loss(torch.sigmoid(boundary_logits), boundary_targets_pyramid)
+        
+        # Apply validity mask to ignore padded areas (-1)
+        valid_mask = valid_mask.to(boundary_logits.device)
+        
+        bce_loss = F.binary_cross_entropy_with_logits(boundary_logits, boundary_targets_pyramid, reduction='none')
+        bce_loss = (bce_loss * valid_mask).sum() / (valid_mask.sum() + 1e-6)
+        
+        dice_loss = self.dice_loss(torch.sigmoid(boundary_logits) * valid_mask, boundary_targets_pyramid * valid_mask)
         
         return bce_loss, dice_loss
 
 class STDCLoss(BiSeNetLoss):
-    def __init__(self, sem_loss, bd_loss):
+    def __init__(self, sem_loss, bd_loss, ignore_index=-1):
         super(STDCLoss, self).__init__(sem_loss)
         self.bd_loss = bd_loss
+        self.ignore_index = ignore_index
 
     def forward(self, outputs, masks):
         if isinstance(outputs, (list, tuple)) and len(outputs) != 4:
@@ -97,7 +109,7 @@ class STDCLoss(BiSeNetLoss):
         output, output16, output32, detail8 = outputs
         
         sem_loss, sem_losses = super().forward([output, output16, output32], masks)
-        boundary_bce_loss, boundary_dice_loss = self.bd_loss(detail8, masks)
+        boundary_bce_loss, boundary_dice_loss = self.bd_loss(detail8, masks, ignore_index=self.ignore_index)
         
         tot_loss = sem_loss + boundary_bce_loss + boundary_dice_loss
         

@@ -121,7 +121,7 @@ class PIDNetLoss(nn.Module):
         loss_s = self.sem_loss([out_p, out_i], masks)
         
         # Boundary loss
-        loss_b = self.bd_loss(out_d, bd_gt)
+        loss_b = self.bd_loss(out_d, bd_gt, mask=masks, ignore_index=self.ignore_index)
         
         # BAS loss
         filler = torch.ones_like(masks) * self.ignore_index

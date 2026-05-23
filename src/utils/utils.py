@@ -68,15 +68,27 @@ def load_checkpoint(chp_path, model, device, disc_model=None, optimizer=None, di
     model.load_state_dict(checkpoint['model'])
     
     if disc_model is not None:
-        disc_model.load_state_dict(checkpoint['disc_model'])
+        if isinstance(disc_model, list):
+            for d, s in zip(disc_model, checkpoint['disc_model']):
+                d.load_state_dict(s)
+        else:
+            disc_model.load_state_dict(checkpoint['disc_model'])
     if optimizer is not None:
         optimizer.load_state_dict(checkpoint['optimizer'])
     if disc_optimizer is not None:
-        disc_optimizer.load_state_dict(checkpoint['disc_optimizer'])
+        if isinstance(disc_optimizer, list):
+            for d, s in zip(disc_optimizer, checkpoint['disc_optimizer']):
+                d.load_state_dict(s)
+        else:
+            disc_optimizer.load_state_dict(checkpoint['disc_optimizer'])
     if scheduler is not None:
         scheduler.load_state_dict(checkpoint['scheduler'])
     if disc_scheduler is not None:
-        disc_scheduler.load_state_dict(checkpoint['disc_scheduler'])
+        if isinstance(disc_scheduler, list):
+            for d, s in zip(disc_scheduler, checkpoint['disc_scheduler']):
+                d.load_state_dict(s)
+        else:
+            disc_scheduler.load_state_dict(checkpoint['disc_scheduler'])
         
     best_miou = checkpoint.get('miou', None)
     ious = checkpoint.get('ious', None)

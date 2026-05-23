@@ -12,7 +12,10 @@ from src.train.pidnet import evaluate_pidnet
 from src.train.stdc import evaluate_stdc
 
 
-def trainset_setup(cfg, domain, g, seed_worker, num_workers, augmentations=A.Compose([]), boundaries=False, reduce_factor=1):
+def trainset_setup(cfg, domain, g, seed_worker, num_workers, augmentations=None, boundaries=False, reduce_factor=1):
+    
+    if augmentations is None:
+        augmentations = A.NoOp()
     
     downscale = (
         A.Resize(cfg.data.downscale["height"], cfg.data.downscale["width"], p=1)

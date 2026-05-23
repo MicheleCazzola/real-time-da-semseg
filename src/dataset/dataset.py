@@ -29,12 +29,12 @@ def load_images(root_path, directory, img, mask):
 
     return images
 
-def generate_bd(mask, edge_pad=False, is_flip=False, edge_size=2):
+def generate_bd(mask, edge_pad=False, edge_size=2):
 
     y_k_size = 6
     x_k_size = 6
 
-    edge = cv2.Canny(mask, 0, 8)
+    edge = cv2.Canny(mask, 0.1, 0.2)
     kernel = np.ones((edge_size, edge_size), np.uint8)
 
     if edge_pad:
