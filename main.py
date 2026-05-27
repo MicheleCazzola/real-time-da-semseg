@@ -71,6 +71,7 @@ if __name__ == "__main__":
     parser.add_argument('--loss', type=str, help='Loss function to use for training.')
     parser.add_argument('--checkpoint-path', type=str, help='Path to a checkpoint to resume training or for evaluation.')
     parser.add_argument('--pretrained-path', type=str, help='Path to pretrained weights for model initialization.')
+    parser.add_argument('--last-epoch', type=int, help='The last epoch number to train up to (used for training across multiple runs).')
     args = parser.parse_args()
 
     with open(args.from_config, 'r') as f:
@@ -187,7 +188,8 @@ if __name__ == "__main__":
             reduce_factor=args.reduce_factor,
             boundaries=bd_required,
         )
-
+        
+        last_epoch = args.last_epoch if args.last_epoch is not None else cfg.training.epochs   
         if cfg.training.adaptation is None:
             train_result = train_model(
                 model,
@@ -199,7 +201,7 @@ if __name__ == "__main__":
                 optimizer,
                 scheduler,
                 start_epoch,
-                cfg.training.epochs,
+                last_epoch,
                 start_miou,
                 bd_required=bd_required,
                 checkpoint_dir=output_dir,
@@ -225,7 +227,7 @@ if __name__ == "__main__":
                 scheduler,
                 disc_scheduler,
                 start_epoch,
-                cfg.training.epochs,
+                last_epoch,
                 start_miou,
                 bd_required=bd_required,
                 checkpoint_dir=output_dir,
@@ -259,7 +261,7 @@ if __name__ == "__main__":
                 scheduler,
                 disc_schedulers,
                 start_epoch,
-                cfg.training.epochs,
+                last_epoch,
                 start_miou,
                 bd_required=bd_required,
                 checkpoint_dir=output_dir,

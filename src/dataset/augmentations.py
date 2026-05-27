@@ -26,5 +26,5 @@ def get_augmentations(aug_prob, aug_prob_one_of, aug_params):
     return A.Compose(
         [augmentations[aug] for aug in alone_augs if aug in aug_params] + 
         [A.OneOf([augmentations[aug] for aug in one_of_augs if aug in aug_params], p=prob_one_of)],
-        p=aug_prob
+        p=aug_prob, seed=42
     )

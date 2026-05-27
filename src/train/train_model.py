@@ -211,6 +211,9 @@ def train_model(model, model_name, num_classes, trainloader, validloader, criter
     
     logging.info(f"Training epochs: {end_epoch} (from {start_epoch + 1} to {end_epoch})")
     
+    lr_0, lr_1 = optimizer.param_groups[0]['lr'], optimizer.param_groups[1]['lr']
+    print(f"Initial learning rates - Group 0: {lr_0} | Group 1: {lr_1}")
+    
     train_losses, val_losses = [], []
     train_task_specific_losses = {}
     train_mious, val_mious = [], []
@@ -219,6 +222,8 @@ def train_model(model, model_name, num_classes, trainloader, validloader, criter
 
     metric = MeanIoU(num_classes=num_classes).to(device)
     for epoch in range(start_epoch, end_epoch):
+        
+        print(f"Epoch {epoch + 1}/{end_epoch} - Learning rates - Group 0: {optimizer.param_groups[0]['lr']} | Group 1: {optimizer.param_groups[1]['lr']}")
 
         data_len, tot_batches = 0, len(trainloader)
         train_loss, epoch_task_specific_losses = 0.0, {}
