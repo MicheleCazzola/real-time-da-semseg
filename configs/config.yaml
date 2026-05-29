@@ -46,11 +46,11 @@ training:
   measure: false
   resume: false
   adaptation: null
-  epochs: 60
+  epochs: 150
   loss: "ohem"
   weighted_loss: false
   ohem_keep: 32768
-  ohem_threshold: 0.8
+  ohem_threshold: 0.9
   focal_gamma: 2.0
   optimizer: "SGD"
   scheduler: "poly"
