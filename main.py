@@ -107,7 +107,7 @@ if __name__ == "__main__":
     num_workers = get_num_workers(device)
 
     # Load dataset and dataloaders
-    id2label = LoveDA.id2label.values()
+    labels = LoveDA.id2label.values()
 
     # Load augmentations
     if cfg.data.augment:
@@ -286,7 +286,7 @@ if __name__ == "__main__":
 
         plot_results(
             dir_path=output_dir,
-            id2label=id2label,
+            labels=labels,
             main_losses=dict(
                 zip(["train_losses", "val_losses"], list(map(train_result.get, ["train_losses", "val_losses"])))
             ),

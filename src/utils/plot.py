@@ -35,7 +35,7 @@ def plot_losses(*losses, labels, title, y_label, best_epoch=None, num_ticks=5, s
     else:
         plt.close()
     
-def plot_results(dir_path, id2label, main_losses=None, mean_ious=None, ious_per_class=None, train_losses=None, show=False):
+def plot_results(dir_path, labels, main_losses=None, mean_ious=None, ious_per_class=None, train_losses=None, show=False):
 
     train_ious = list(np.array(ious_per_class["train_ious"]).T) if "train_ious" in ious_per_class else None
     val_ious = list(np.array(ious_per_class["val_ious"]).T) if "val_ious" in ious_per_class else None
@@ -88,7 +88,7 @@ def plot_results(dir_path, id2label, main_losses=None, mean_ious=None, ious_per_
     if train_ious is not None:
         plot_losses(
             *train_ious,
-            labels=[label for label in id2label] + [f"{label} (Val)" for label in id2label],
+            labels=[label for label in labels] + [f"{label} (Val)" for label in labels],
             title="Training Intersection over Union (IoU) per Class",
             y_label="IoU (%)",
             best_epoch=best_epoch,
@@ -101,7 +101,7 @@ def plot_results(dir_path, id2label, main_losses=None, mean_ious=None, ious_per_
     if val_ious is not None:
         plot_losses(
             *val_ious,
-            labels=[label for label in id2label],
+            labels=[label for label in labels],
             title="Validation Intersection over Union (IoU) per Class",
             y_label="IoU (%)",
             best_epoch=best_epoch,

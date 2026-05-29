@@ -23,6 +23,8 @@ class resnet18(torch.nn.Module):
         self.layer2 = self.features.layer2
         self.layer3 = self.features.layer3
         self.layer4 = self.features.layer4
+        del self.features.avgpool
+        del self.features.fc
 
     def forward(self, input):
         x = self.conv1(input)
@@ -51,6 +53,8 @@ class resnet101(torch.nn.Module):
         self.layer2 = self.features.layer2
         self.layer3 = self.features.layer3
         self.layer4 = self.features.layer4
+        del self.features.avgpool
+        del self.features.fc
 
     def forward(self, input):
         x = self.conv1(input)

@@ -2,12 +2,8 @@
 Deeplab v2 model definition
 """
 
-import logging
 import torch
 import torch.nn as nn
-
-affine_par = True
-
 
 class Bottleneck(nn.Module):
     expansion = 4
@@ -15,16 +11,16 @@ class Bottleneck(nn.Module):
     def __init__(self, inplanes, planes, stride=1, dilation=1, downsample=None):
         super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, stride=stride, bias=False)
-        self.bn1 = nn.BatchNorm2d(planes, affine=affine_par)
+        self.bn1 = nn.BatchNorm2d(planes, affine=True)
         for i in self.bn1.parameters():
             i.requires_grad = False
         padding = dilation
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=padding, bias=False, dilation=dilation)
-        self.bn2 = nn.BatchNorm2d(planes, affine=affine_par)
+        self.bn2 = nn.BatchNorm2d(planes, affine=True)
         for i in self.bn2.parameters():
             i.requires_grad = False
         self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
-        self.bn3 = nn.BatchNorm2d(planes * 4, affine=affine_par)
+        self.bn3 = nn.BatchNorm2d(planes * 4, affine=True)
         for i in self.bn3.parameters():
             i.requires_grad = False
         self.relu = nn.ReLU(inplace=True)
@@ -69,7 +65,7 @@ class ResNetMulti(nn.Module):
         self.inplanes = 64
         super(ResNetMulti, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1 = nn.BatchNorm2d(64, affine=affine_par)
+        self.bn1 = nn.BatchNorm2d(64, affine=True)
 
         for i in self.bn1.parameters():
             i.requires_grad = False
@@ -95,7 +91,7 @@ class ResNetMulti(nn.Module):
         if stride != 1 or self.inplanes != planes * block.expansion or dilation == 2 or dilation == 4:
             downsample = nn.Sequential(
                 nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(planes * block.expansion, affine=affine_par),
+                nn.BatchNorm2d(planes * block.expansion, affine=True),
             )
         for i in downsample._modules['1'].parameters():
             i.requires_grad = False
