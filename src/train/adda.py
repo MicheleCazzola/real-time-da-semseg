@@ -12,20 +12,23 @@ from src.train.train_model import evaluate_model
 from src.utils.utils import save_checkpoint
 
 def adda_setup(cfg, device):
-    disc_criterion = nn.BCEWithLogitsLoss()
 
-    discriminator = FCDiscriminator(num_classes=cfg.adda.adda_num_classes).to(device)
+    discriminator = FCDiscriminator(num_classes=cfg.adda.adda_num_classes, ndf=cfg.adda.disc_ndf).to(device)
     
+    disc_criterion = nn.MSELoss() if cfg.adda.ls_gan else nn.BCEWithLogitsLoss()
+        
     # Optimizer setup
     lr = cfg.adda.adda_learning_rate
     wd = cfg.adda.adda_weight_decay
+    beta1 = cfg.adda.adda_beta1
+    beta2 = cfg.adda.adda_beta2
     match cfg.adda.adda_optimizer:
         case "SGD":
             disc_optimizer = optim.SGD(discriminator.parameters(), lr=lr, momentum=cfg.adda.adda_momentum, weight_decay=wd)
         case "Adam":
-            disc_optimizer = optim.Adam(discriminator.parameters(), lr=lr, weight_decay=wd)
+            disc_optimizer = optim.Adam(discriminator.parameters(), lr=lr, weight_decay=wd, betas=(beta1, beta2))
         case "AdamW":
-            disc_optimizer = optim.AdamW(discriminator.parameters(), lr=lr, weight_decay=wd)
+            disc_optimizer = optim.AdamW(discriminator.parameters(), lr=lr, weight_decay=wd, betas=(beta1, beta2))
         case _:
             raise ValueError(f"Unsupported optimizer: {cfg.adda.adda_optimizer}")
 
@@ -216,8 +219,8 @@ def train_adda(
             
             epoch_adda_specific_losses["train_losses_disc_target"] += batch_loss_disc_target.item() * inputs_target.size(0)
 
-            #clip_grad.clip_grad_norm_(filter(lambda p: p.requires_grad, generator.parameters()), max_norm=35, norm_type=2)
-            #clip_grad.clip_grad_norm_(filter(lambda p: p.requires_grad, discriminator.parameters()), max_norm=35, norm_type=2)
+            #torch.nn.utils.clip_grad.clip_grad_norm_(filter(lambda p: p.requires_grad, generator.parameters()), max_norm=35, norm_type=2)
+            #torch.nn.utils.clip_grad.clip_grad_norm_(filter(lambda p: p.requires_grad, discriminator.parameters()), max_norm=35, norm_type=2)
             
             optimizer_gen.step()
             optimizer_disc.step()

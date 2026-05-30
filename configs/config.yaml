@@ -15,7 +15,7 @@ path:
 data:
   imagenet_mean: [0.485, 0.456, 0.406]
   imagenet_std: [0.229, 0.224, 0.225]
-  batch_size: 12
+  batch_size: 2
   dimensions:
     height: 1024
     width: 1024
@@ -23,9 +23,9 @@ data:
   resize:
     height: 512
     width: 512
-  augment: false
+  augment: true
   aug_prob: 1
-  aug_prob_one_of: 0.75
+  aug_prob_one_of: 0
   aug_names:
     RC:
       height: 512
@@ -45,21 +45,21 @@ training:
   evaluate: true
   measure: false
   resume: false
-  adaptation: null
-  epochs: 60
-  loss: "ohem"
+  adaptation: "adda"
+  epochs: 20
+  loss: "cross_entropy"
   weighted_loss: false
   ohem_keep: 32768
   ohem_threshold: 0.9
   focal_gamma: 2.0
-  optimizer: "AdamW"
+  optimizer: "SGD"
   scheduler: "poly"
   power: 0.9
   eta_min: 1.e-6
   learning_rate: 
     pidnet_s: 
-      - 1.5e-4
-      - 1.5e-3
+      - 1.e-4
+      - 1.e-4
     bisenet_v1_rt:
       - 1.e-4
       - 1.e-3
@@ -72,20 +72,24 @@ training:
     deeplab_v2:
       - 1.e-4
       - 1.e-3
-  weight_decay: 1.e-3
+  weight_decay: 5.e-4
   step_size: 10
   gamma: 0.1
   momentum: 0.9
 
 adda:
-  lambda_adv: 0.01
+  disc_ndf: 64
+  ls_gan: false
+  lambda_adv: 0.005
   adda_num_classes: 7
   adda_optimizer: "Adam"
   adda_scheduler: "poly"
   adda_power: 0.9
   adda_eta_min: 1.e-6
   adda_learning_rate: 1.e-4
-  adda_weight_decay: 5.e-3
+  adda_beta1: 0.9
+  adda_beta2: 0.99
+  adda_weight_decay: 0
   adda_step_size: 10
   adda_gamma: 0.1
   adda_momentum: 0.9
