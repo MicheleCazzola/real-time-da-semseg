@@ -14,18 +14,13 @@ def pil_loader(path, codify):
         img = Image.open(f)
         return img.convert(codify)
 
-def load_images(root_path, directory, img, mask):
+def load_images(root_path, directory, img):
     directory_path = root_path / directory
     img_path = directory_path / img
-    mask_path = directory_path / mask
-    if not img_path.is_dir() or not mask_path.is_dir():
-        raise RuntimeError("folder structure different from expected")
-
+    if not img_path.is_dir():
+        raise RuntimeError(f"Image path {img_path} is not a directory")
+    
     images = [item.name for item in img_path.iterdir()]
-    masks = [item.name for item in mask_path.iterdir()]
-
-    if set(images) != set(masks):
-        raise RuntimeError("images and masks do not match")
 
     return images
 
@@ -127,7 +122,7 @@ class LoveDA(VisionDataset):
         
         return torch.tensor(weights, dtype=torch.float32)
 
-    def __init__(self, root, img, mask, directories=None, transforms=None, bd=False, reduce_factor=1):
+    def __init__(self, root, img, mask, directories=None, transforms=None, bd=False, fname=False, reduce_factor=1):
         super(LoveDA, self).__init__(root)
 
         root_path = Path(root)
@@ -141,6 +136,7 @@ class LoveDA(VisionDataset):
         self.mask_path = mask
         self.transforms = transforms
         self.bd = bd
+        self.fname = fname
         self.reduce_factor = reduce_factor
 
         self.image_names = []
@@ -148,7 +144,7 @@ class LoveDA(VisionDataset):
         directories = [directories] if isinstance(directories, str) else directories
 
         for d in directories:
-          image_names = load_images(root_path, d, img, mask)
+          image_names = load_images(root_path, d, img)
           self.image_names.extend([(d, image_name) for image_name in image_names])
         
         if self.reduce_factor < 1:
@@ -164,6 +160,8 @@ class LoveDA(VisionDataset):
 
         image = np.array(image)
         mask = np.array(mask)
+        
+        assert image.shape[:2] == mask.shape, f"Image and mask shapes do not match for {image_name}: {image.shape} vs {mask.shape}"
 
         if self.transforms is not None:
             data = self.transforms(image=image, mask=mask)
@@ -172,13 +170,16 @@ class LoveDA(VisionDataset):
           
         # Map classes in [1-7] to [0-6] and ignored from 0 to -1
         mask = mask.long() - 1
+        
+        result = (image, mask)
 
         if self.bd:
             bd = generate_bd(mask.numpy().astype(np.uint8))
+            result += (bd,)
+        if self.fname:
+            result += (image_name,)
 
-            return image, mask, bd
-
-        return image, mask
+        return result
 
     def __len__(self):
         length = len(self.image_names)

@@ -127,13 +127,15 @@ def setup_model(cfg, device, backbone_name=None):
             optimizer = optim.AdamW(opt_param_groups)
         case _:
             raise ValueError(f"Unsupported optimizer: {cfg.training.optimizer}")
-
+    
     # Scheduler setup
     match cfg.training.scheduler:
         case "step_lr":
             scheduler = lr_scheduler.StepLR(optimizer, step_size=cfg.training.step_size, gamma=cfg.training.gamma)
         case "poly":
-            scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda epoch: (1 - epoch / cfg.training.epochs) ** cfg.training.power)
+            scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda epoch: 
+                min(1.0, ((epoch + 1) / cfg.training.warmup_epochs if cfg.training.warmup_epochs > 0 else 1.0)) * (1 - max(0.0, (epoch + 1 - cfg.training.warmup_epochs) / (cfg.training.epochs - cfg.training.warmup_epochs))) ** cfg.training.power
+            )
         case "cosine":
             scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.training.epochs, eta_min=cfg.training.eta_min)
         case _:

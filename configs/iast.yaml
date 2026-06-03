@@ -1,0 +1,34 @@
+
+
+
+NUM_CLASSES: 7
+SNAPSHOT_DIR:  './pseudo_labels/2rural'
+
+
+#Hyper Paramters
+LEARNING_RATE_D: 1.e-4
+NUM_STEPS: 7000
+NUM_STEPS_STOP: 2000  # Use damping instead of early stopping
+PREHEAT_STEPS: 750
+EVAL_EVERY: 1500
+
+DISCRIMINATOR:
+    lambda_kldreg_weight: 0.1
+    lambda_entropy_weight: 3.0
+    weight: 0.
+
+GENERATE_PSEUDO_EVERY: 2
+WARMUP_STEP: 8000
+PSEUDO_DICT:
+    pl_alpha: 0.2
+    pl_gamma: 8.0
+    pl_beta: 0.9
+
+PSEUDO_LOSS_WEIGHT: 0.5
+SOURCE_LOSS_WEIGHT: 1.0
+
+TARGET_SET: "Rural"
+SOURCE_DATA_CONFIG: SOURCE_DATA_CONFIG
+TARGET_DATA_CONFIG: TARGET_DATA_CONFIG
+EVAL_DATA_CONFIG: EVAL_DATA_CONFIG
+TTA_CFG: None

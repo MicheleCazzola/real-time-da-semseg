@@ -37,7 +37,9 @@ def adda_setup(cfg, device):
         case "step_lr":
             disc_scheduler = lr_scheduler.StepLR(disc_optimizer, step_size=cfg.adda.adda_step_size, gamma=cfg.adda.adda_gamma)
         case "poly":
-            disc_scheduler = lr_scheduler.LambdaLR(disc_optimizer, lr_lambda=lambda epoch: (1 - epoch / cfg.training.epochs) ** cfg.adda.adda_power)
+            disc_scheduler = lr_scheduler.LambdaLR(disc_optimizer, lr_lambda=lambda epoch: 
+                min(1.0, ((epoch + 1) / cfg.training.warmup_epochs if cfg.training.warmup_epochs > 0 else 1.0)) * (1 - max(0.0, (epoch + 1 - cfg.training.warmup_epochs) / (cfg.training.epochs - cfg.training.warmup_epochs))) ** cfg.adda.adda_power
+            )
         case "cosine":
             disc_scheduler = lr_scheduler.CosineAnnealingLR(disc_optimizer, T_max=cfg.training.epochs, eta_min=cfg.adda.adda_eta_min)
         case None:
@@ -51,7 +53,7 @@ def adda_setup(cfg, device):
 def train_adda(
     generator, discriminator, gen_name, num_classes, lambda_adv, trainloader_source, trainloader_target, validloader, 
     criterion_gen, criterion_disc, optimizer_gen, optimizer_disc, scheduler, scheduler_disc, start_epoch, end_epoch,
-    start_miou, bd_required, checkpoint_dir, device, log_frequency
+    start_miou, bd_required, checkpoint_dir, device, log_frequency, extended_debug=False
 ):
     
     logging.info(f"{gen_name} - ADDA training")
@@ -95,6 +97,10 @@ def train_adda(
 
         generator.train()
         discriminator.train()
+        
+        lr = scheduler.get_last_lr()[0] if scheduler is not None else optimizer_gen.param_groups[0]['lr']
+        disc_lr = scheduler_disc.get_last_lr()[0] if scheduler_disc is not None else optimizer_disc.param_groups[0]['lr']
+        logging.info(f"LR: {lr:.6f}, Disc LR: {disc_lr:.6f}")
 
         for i, (batch_source, batch_target) in enumerate(data_stream):
             for idx in range(len(batch_source)):
@@ -127,9 +133,10 @@ def train_adda(
             batch_loss_gen_source.backward()
             
             # Retain grads
-            task_grads = [p.grad.detach() for p in generator.parameters() if p.grad is not None]
-            grad_norm_task = torch.norm(torch.stack([g.norm(2) for g in task_grads]))
-            old_grads = {p: p.grad.clone() for p in generator.parameters() if p.grad is not None}
+            if extended_debug:
+                task_grads = [p.grad.detach() for p in generator.parameters() if p.grad is not None]
+                grad_norm_task = torch.norm(torch.stack([g.norm(2) for g in task_grads]))
+                old_grads = {p: p.grad.clone() for p in generator.parameters() if p.grad is not None}
             
             train_loss_gen_source += batch_loss_gen_source.item() * inputs_source.size(0)
             
@@ -137,13 +144,15 @@ def train_adda(
             outputs_target = generator(inputs_target)
             pred_gen_target = get_main_output(outputs_target)
             
-            # ANALYTICAL TRACKING: 
-            # Tell PyTorch to retain gradients for these intermediate tensors (normally dropped)
-            pred_gen_target.retain_grad()  # Direct output of PIDNet (logits)
-            
+            # ANALYTICAL TRACKING: retain gradients on the direct output (logits)
+            if extended_debug:
+                pred_gen_target.retain_grad()  # Direct output of PIDNet (logits)
+
+            # Feed logits to discriminator (avoid softmax attenuation)
             preds_target = F.softmax(pred_gen_target, dim=1)
-            preds_target.retain_grad()     # Softmax output (probabilities)
-            
+            if extended_debug:
+                preds_target.retain_grad()
+
             outputs_gen_target = discriminator(preds_target)
 
             batch_loss_gen_target = criterion_disc(outputs_gen_target, torch.zeros_like(outputs_gen_target))
@@ -153,44 +162,45 @@ def train_adda(
             batch_loss_gen_target = lambda_adv * batch_loss_gen_target
             batch_loss_gen_target.backward()
             
-            grad_in_softmax = preds_target.grad.norm(2).item() if preds_target.grad is not None else 0.0
-            grad_out_softmax = pred_gen_target.grad.norm(2).item() if pred_gen_target.grad is not None else 0.0
-            
-            print(f"\n{'='*50}")
-            print(f"--- ANALYTICAL PROPAGATION ANALYSIS (Iter {i+1}) ---")
-            print(f"1. Gradient from Disc (on Probabilities): {grad_in_softmax:.6f}")
-            print(f"2. Post-Softmax Gradient (on PIDNet Logits): {grad_out_softmax:.6f}")
-            if grad_in_softmax > 0:
-                print(f"-> Survival through Softmax Jacobian: {(grad_out_softmax/grad_in_softmax)*100:.2f}%")
-            
-            final_layer_grad = layer1_grad = None
-            for name, p in generator.named_parameters():
-                if 'final_layer.conv2.weight' in name and p.grad is not None:
-                    adv_g = p.grad.detach() - old_grads[p] if p in old_grads else p.grad.detach()
-                    final_layer_grad = adv_g.norm(2).item()
-                if 'layer1.0.conv1.weight' in name and p.grad is not None:
-                    adv_g = p.grad.detach() - old_grads[p] if p in old_grads else p.grad.detach()
-                    layer1_grad = adv_g.norm(2).item()
+            if extended_debug:
+                grad_in_softmax = preds_target.grad.norm(2).item() if preds_target.grad is not None else 0.0
+                grad_out_softmax = pred_gen_target.grad.norm(2).item() if pred_gen_target.grad is not None else 0.0
+                
+                logging.info(f"\n{'='*50}")
+                logging.info(f"--- ANALYTICAL PROPAGATION ANALYSIS (Iter {i+1}) ---")
+                logging.info(f"1. Gradient from Disc (on Logits): {grad_in_softmax:.6f}")
+                logging.info(f"2. Gradient on PIDNet Logits: {grad_out_softmax:.6f}")
+                if grad_in_softmax > 0:
+                    logging.info(f"-> Survival through Input Mapping: {(grad_out_softmax/grad_in_softmax)*100:.2f}%")
+                
+                final_layer_grad = layer1_grad = None
+                for name, p in generator.named_parameters():
+                    if 'final_layer.conv2.weight' in name and p.grad is not None:
+                        adv_g = p.grad.detach() - old_grads[p] if p in old_grads else p.grad.detach()
+                        final_layer_grad = adv_g.norm(2).item()
+                    if 'layer1.0.conv1.weight' in name and p.grad is not None:
+                        adv_g = p.grad.detach() - old_grads[p] if p in old_grads else p.grad.detach()
+                        layer1_grad = adv_g.norm(2).item()
 
-            if final_layer_grad is not None and layer1_grad is not None:
-                print(f"\n3. Adv Magnitude at Head (final_layer.conv2): {final_layer_grad:.6f}")
-                print(f"4. Adv Magnitude at Base (layer1.0.conv1): {layer1_grad:.6f}")
-                if final_layer_grad > 0:
-                    print(f"-> Structural survival through PIDNet: {(layer1_grad/final_layer_grad)*100:.4f}%")
+                if final_layer_grad is not None and layer1_grad is not None:
+                    logging.info(f"\n3. Adv Magnitude at Head (final_layer.conv2): {final_layer_grad:.6f}")
+                    logging.info(f"4. Adv Magnitude at Base (layer1.0.conv1): {layer1_grad:.6f}")
+                    if final_layer_grad > 0:
+                        logging.info(f"-> Structural survival through PIDNet: {(layer1_grad/final_layer_grad)*100:.4f}%")
+                    else:
+                        logging.info("\n4. Could not compute structural survival (negative or zero gradient at final layer)")
                 else:
-                    print("\n4. Could not compute structural survival (negative or zero gradient at final layer)")
-            else:
-                print("\n3. Could not compute structural survival (missing gradients in key layers)")
-            print(f"{'='*50}\n")
+                    logging.info("\n3. Could not compute structural survival (missing gradients in key layers)")
+                logging.info(f"{'='*50}\n")
 
-            # Compute adversarial gradient norms
-            adv_grads = [(p.grad.detach() - old_grads[p]) if p in old_grads else p.grad.detach() for p in generator.parameters() if p.grad is not None]
-            grad_norm_adv = torch.norm(torch.stack([g.norm(2) for g in adv_grads]))
+                # Compute adversarial gradient norms
+                adv_grads = [(p.grad.detach() - old_grads[p]) if p in old_grads else p.grad.detach() for p in generator.parameters() if p.grad is not None]
+                grad_norm_adv = torch.norm(torch.stack([g.norm(2) for g in adv_grads]))
             
-            # Compute total gradient norms
-            grad_norm_total = torch.norm(torch.stack([p.grad.detach().norm(2) for p in generator.parameters() if p.grad is not None]))
-            
-            print(f"Iter {i+1} | Grad Norm Task: {grad_norm_task:.4f} | Grad Norm Adv: {grad_norm_adv:.4f} | Grad Norm Total: {grad_norm_total:.4f}")
+                # Compute total gradient norms
+                grad_norm_total = torch.norm(torch.stack([p.grad.detach().norm(2) for p in generator.parameters() if p.grad is not None]))
+                
+                logging.info(f"Iter {i+1} | Grad Norm Task: {grad_norm_task:.4f} | Grad Norm Adv: {grad_norm_adv:.4f} | Grad Norm Total: {grad_norm_total:.4f}")
 
             # ===== Train discriminator =====
             # Unfreeze discriminator
@@ -199,6 +209,7 @@ def train_adda(
 
             # Train with source
             pred_gen_source = pred_gen_source.detach()
+            # Feed logits to discriminator (no softmax)
             preds_source = F.softmax(pred_gen_source, dim=1)
             outputs_disc_source = discriminator(preds_source)
 
@@ -210,6 +221,7 @@ def train_adda(
 
             # Train with target
             pred_gen_target = pred_gen_target.detach()
+            # Feed logits to discriminator (no softmax)
             preds_target = F.softmax(pred_gen_target, dim=1)
             outputs_disc_target = discriminator(preds_target)
 
@@ -219,8 +231,8 @@ def train_adda(
             
             epoch_adda_specific_losses["train_losses_disc_target"] += batch_loss_disc_target.item() * inputs_target.size(0)
 
-            #torch.nn.utils.clip_grad.clip_grad_norm_(filter(lambda p: p.requires_grad, generator.parameters()), max_norm=35, norm_type=2)
-            #torch.nn.utils.clip_grad.clip_grad_norm_(filter(lambda p: p.requires_grad, discriminator.parameters()), max_norm=35, norm_type=2)
+            torch.nn.utils.clip_grad.clip_grad_norm_(filter(lambda p: p.requires_grad, generator.parameters()), max_norm=35, norm_type=2)
+            torch.nn.utils.clip_grad.clip_grad_norm_(filter(lambda p: p.requires_grad, discriminator.parameters()), max_norm=35, norm_type=2)
             
             optimizer_gen.step()
             optimizer_disc.step()

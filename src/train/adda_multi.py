@@ -170,7 +170,8 @@ def train_adda_multi(
             lambdas_adv = [lambda_adv / 10, lambda_adv] if len(outputs_target) > 1 else [lambda_adv]
             for out_idx, (out_target, disc, crit, current_lambda_adv) in enumerate(zip(outputs_target, discriminators, criterions_disc, lambdas_adv)):
                 out_target.retain_grad()
-                preds_target = F.softmax(out_target, dim=1)
+                # Feed logits to discriminator (no softmax) to avoid softmax attenuation
+                preds_target = out_target
                 preds_target.retain_grad()
                 
                 outputs_gen_target = disc(preds_target)
@@ -263,7 +264,8 @@ def train_adda_multi(
                 outputs_source = [outputs_source]
             
             for out_idx, (out_source, disc, crit) in enumerate(zip(outputs_source, discriminators, criterions_disc)):
-                preds_source = F.softmax(out_source.detach(), dim=1)
+                # Feed logits to discriminator (no softmax)
+                preds_source = out_source.detach()
                 outputs_disc_source = disc(preds_source)
                 iter_stats["discriminators"][str(out_idx)]["source_domain_mean"] = torch.sigmoid(outputs_disc_source).mean().item()
                 batch_loss_disc_source_disc = crit(outputs_disc_source, torch.zeros_like(outputs_disc_source)) / 2
@@ -276,7 +278,8 @@ def train_adda_multi(
                 outputs_target = [outputs_target]
                 
             for out_idx, (out_target, disc, crit) in enumerate(zip(outputs_target, discriminators, criterions_disc)):
-                preds_target = F.softmax(out_target.detach(), dim=1)
+                # Feed logits to discriminator (no softmax)
+                preds_target = out_target.detach()
                 outputs_disc_target = disc(preds_target)
                 iter_stats["discriminators"][str(out_idx)]["target_domain_mean"] = torch.sigmoid(outputs_disc_target).mean().item()
                 batch_loss_disc_target_disc = crit(outputs_disc_target, torch.ones_like(outputs_disc_target)) / 2

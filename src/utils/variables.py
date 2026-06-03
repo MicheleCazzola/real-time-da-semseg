@@ -70,12 +70,13 @@ class AdaptationMethod(str, Enum):
     ADDA = "adda"
     ADDA_MULTI = "adda_multi"
     DACS = "dacs"
+    IAST = "iast"
     
     def __str__(self):
         return self.value
     
     def values():
-        return [AdaptationMethod.ADDA.value, AdaptationMethod.ADDA_MULTI.value, AdaptationMethod.DACS.value]
+        return [AdaptationMethod.ADDA.value, AdaptationMethod.ADDA_MULTI.value, AdaptationMethod.DACS.value, AdaptationMethod.IAST.value]
 
 categories = {
     'BARREN': (0.003921568859368563, (159, 129, 183)),       # Lilla

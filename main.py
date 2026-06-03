@@ -7,6 +7,8 @@ from datetime import datetime
 
 import torch
 import torch.multiprocessing
+
+from src.train.iast import iast_setup, train_iast
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 from src.dataset.dataset import LoveDA
@@ -72,6 +74,7 @@ if __name__ == "__main__":
     parser.add_argument('--checkpoint-path', type=str, help='Path to a checkpoint to resume training or for evaluation.')
     parser.add_argument('--pretrained-path', type=str, help='Path to pretrained weights for model initialization.')
     parser.add_argument('--last-epoch', type=int, help='The last epoch number to train up to (used for training across multiple runs).')
+    parser.add_argument('--iast-regenerate', action='store_true', help='Flag to indicate whether to regenerate pseudo-labels at the beginning of training and every N epochs during IAST training.')
     args = parser.parse_args()
 
     with open(args.from_config, 'r') as f:
@@ -175,6 +178,7 @@ if __name__ == "__main__":
             g,
             seed_worker,
             num_workers,
+            split_dir=cfg.path.val_dir,
             augmentations=augmentations,
             reduce_factor=args.reduce_factor,
             boundaries=bd_required,
@@ -188,8 +192,7 @@ if __name__ == "__main__":
             reduce_factor=args.reduce_factor,
             boundaries=bd_required,
         )
-        
-        last_epoch = args.last_epoch if args.last_epoch is not None else cfg.training.epochs   
+         
         if cfg.training.adaptation is None:
             train_result = train_model(
                 model,
@@ -201,7 +204,7 @@ if __name__ == "__main__":
                 optimizer,
                 scheduler,
                 start_epoch,
-                last_epoch,
+                cfg.training.last_epoch,
                 start_miou,
                 bd_required=bd_required,
                 checkpoint_dir=output_dir,
@@ -227,7 +230,7 @@ if __name__ == "__main__":
                 scheduler,
                 disc_scheduler,
                 start_epoch,
-                last_epoch,
+                cfg.training.last_epoch,
                 start_miou,
                 bd_required=bd_required,
                 checkpoint_dir=output_dir,
@@ -261,7 +264,7 @@ if __name__ == "__main__":
                 scheduler,
                 disc_schedulers,
                 start_epoch,
-                last_epoch,
+                cfg.training.last_epoch,
                 start_miou,
                 bd_required=bd_required,
                 checkpoint_dir=output_dir,
@@ -278,7 +281,85 @@ if __name__ == "__main__":
                 }
             )
         elif cfg.training.adaptation == AdaptationMethod.DACS.value:
-            raise NotImplementedError("DACS not integrated yet")
+            ema_model = dacs_setup(cfg, model, device)
+            train_result = train_dacs(
+                model,
+                ema_model,
+                cfg.model.model,
+                cfg.model.num_classes,
+                trainloader_source,
+                trainloader_target,
+                validloader,
+                criterion,
+                optimizer,
+                scheduler,
+                start_epoch,
+                cfg.training.last_epoch,
+                start_miou,
+                bd_required=bd_required,
+                checkpoint_dir=output_dir,
+                device=device,
+                log_frequency=10,
+                pixel_weight=cfg.dacs.pixel_weight if hasattr(cfg, "dacs") else "threshold",
+                pseudo_threshold=cfg.dacs.pseudo_threshold if hasattr(cfg, "dacs") else 0.968,
+                use_ema_for_pseudo=cfg.dacs.use_ema_for_pseudo if hasattr(cfg, "dacs") else True,
+                alpha_teacher=cfg.dacs.alpha_teacher if hasattr(cfg, "dacs") else 0.99,
+                ignore_index=cfg.model.ignore_index
+            )
+            train_specific_losses = make_train_specific_losses(train_result)
+        elif cfg.training.adaptation == AdaptationMethod.IAST.value:
+            with open(os.path.join("configs", f"iast.yaml"), 'r') as f:
+                iast_cfg = Box(yaml.safe_load(f))
+                
+            trainset_target, trainloader_target = trainset_setup(
+                cfg,
+                cfg.path.target,
+                g,
+                seed_worker,
+                num_workers,
+                reduce_factor=args.reduce_factor,
+                boundaries=bd_required,
+                img_names=True,
+                shuffle=False,  # Important to keep track of pseudo-labels across epochs
+                drop_last=False,  # Important to keep track of pseudo-labels across epochs
+                resize=False
+            )
+            
+            model_D, criterion_D, criterion_ent, criterion_kd, optimizer_D, scheduler_D = iast_setup(iast_cfg, device)
+            criterion_ent = torch.nn.CrossEntropyLoss(ignore_index=cfg.model.ignore_index)
+            criterion_kd = torch.nn.KLDivLoss(reduction='batchmean')
+            train_result = train_iast(
+                model,
+                cfg.model.model,
+                model_D,
+                trainloader_source,
+                trainloader_target,
+                validloader,
+                criterion,
+                criterion_D,
+                criterion_ent,
+                criterion_kd,
+                optimizer,
+                optimizer_D,
+                scheduler,
+                scheduler_D,
+                cfg.training.last_epoch,
+                bd_required=bd_required,
+                cfg=cfg,
+                iast_cfg=iast_cfg,
+                trainset_build_params={
+                    "reduce_factor": args.reduce_factor,
+                    "g": g,
+                    "seed_worker": seed_worker,
+                    "num_workers": num_workers,
+                    "augmentations": augmentations,
+                },
+                device=device,
+                checkpoint_dir=output_dir,
+                regenerate=args.iast_regenerate,
+                log_frequency=10,
+            )
+            train_specific_losses = make_train_specific_losses(train_result)
         else:
             raise NotImplementedError(f"Adaptation method {cfg.adaptation.adaptation_method} not supported")
 
@@ -307,7 +388,7 @@ if __name__ == "__main__":
             g,
             seed_worker,
             reduce_factor=args.reduce_factor,
-            boundaries=bd_required,
+            boundaries=bd_required
         )
 
         loss, miou, ious = evaluate_model(model, cfg.model.model, cfg.model.num_classes, validloader, criterion, bd_required, -1, 0, device, 1)
