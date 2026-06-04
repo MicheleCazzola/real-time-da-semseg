@@ -54,14 +54,14 @@ training:
   ohem_keep: 32768
   ohem_threshold: 0.9
   focal_gamma: 2.0
-  optimizer: "SGD"
+  optimizer: "AdamW"
   scheduler: "poly"
   power: 0.9
   eta_min: 1.e-6
   learning_rate: 
     pidnet_s: 
-      - 5.e-3
-      - 5.e-4
+      - 1.25e-4
+      - 1.25e-3
     bisenet_v1_rt:
       - 1.e-4
       - 1.e-3
@@ -74,7 +74,7 @@ training:
     deeplab_v2:
       - 1.e-4
       - 1.e-3
-  weight_decay: 5.e-4
+  weight_decay: 1.e-3
   step_size: 10
   gamma: 0.1
   momentum: 0.9
@@ -82,13 +82,13 @@ training:
 adda:
   disc_ndf: 64
   ls_gan: false
-  lambda_adv: 0.001
+  lambda_adv: 1.e-5
   adda_num_classes: 7
   adda_optimizer: "Adam"
   adda_scheduler: "poly"
   adda_power: 0.9
   adda_eta_min: 1.e-6
-  adda_learning_rate: 5.e-5
+  adda_learning_rate: 1.e-4
   adda_beta1: 0.9
   adda_beta2: 0.99
   adda_weight_decay: 0
