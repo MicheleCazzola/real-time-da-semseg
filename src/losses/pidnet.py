@@ -4,28 +4,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from src.dataset.dataset import generate_bd
-from .focal import FocalLoss
-from .ohem import OHEMCrossEntropy
+from src.losses.focal import FocalLoss
+from src.losses.ohem import OHEMCrossEntropy
 from src.utils.variables import SemanticLoss
-
-def pidnet_loss(outputs, labels, sem_loss, bd_loss, ignore_index=-1, bd_gt=None):
-    loss_s = sem_loss(outputs[:-1], labels)
-    
-    if bd_gt is None:
-        bd_gt = np.zeros_like(labels.cpu().numpy(), dtype=np.float32)
-        for i, m in enumerate(labels):
-            bd_gt[i] = generate_bd(m.cpu().numpy().astype(np.uint8))
-
-        bd_gt = torch.from_numpy(bd_gt).to(labels.device)
-
-    loss_b = bd_loss(outputs[-1], bd_gt)
-
-    filler = torch.ones_like(labels) * ignore_index
-    bd_label = torch.where(F.sigmoid(outputs[-1][:,0,:,:]) > 0.8, labels, filler)
-
-    loss_sb = sem_loss([outputs[-2]], bd_label)
-    
-    return loss_s, loss_b, loss_sb
 
 class PIDNetSemanticLoss(nn.Module):
     def __init__(self, type=SemanticLoss.CE, ignore_index=-1, **kwargs):

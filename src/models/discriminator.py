@@ -1,6 +1,6 @@
 """
-Fully Convolutional Discriminator for Adversarial Training (ADDA)
-From the original implementation: github.com/wasidennis/AdaptSegNet
+	Fully Convolutional Discriminator for Adversarial Training (AdaptSeg)
+	Source: github.com/wasidennis/AdaptSegNet
 """
 
 import torch.nn as nn

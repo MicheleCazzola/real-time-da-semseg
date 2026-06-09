@@ -1,6 +1,11 @@
+"""
+    Instance Adaptive Self-Training (IAST) training loop implementation
+    Adapted from:
+    - github.com/Raykoooo/IAST
+    - github.com/Junjue-Wang/LoveDA
+"""
+
 import os
-import os.path as osp
-from PIL import Image
 from matplotlib import pyplot as plt
 import torch
 import torch.optim as optim
@@ -10,11 +15,10 @@ import numpy as np
 
 from torch.nn.utils import clip_grad
 from tqdm import tqdm
-from src.dataset.dataset import generate_bd
 from src.metrics.mean_iou import MeanIoU
 from src.models.discriminator import FCDiscriminator
 from src.train.train_model import evaluate_model
-from src.train.utils import trainset_setup
+from src.dataset.utils import trainset_setup
 from src.utils.utils import save_checkpoint
 
 class EntropyLoss(torch.nn.Module):

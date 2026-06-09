@@ -1,8 +1,5 @@
 import albumentations as A
 
-def get_nop_augmentation():
-    return A.Compose([], p=1)
-
 def get_augmentations(aug_prob, aug_prob_one_of, aug_params):
     
     alone_augs = ["RC"]

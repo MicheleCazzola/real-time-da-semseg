@@ -1,14 +1,12 @@
 """
-BiSeNet model definition
-From the original implementation: github.com/CoinCheung/BiSeNet
+    BiSeNet model definition
+    Source: github.com/CoinCheung/BiSeNet
 """
 import logging
 import torch
 from torchvision import models
 import torch
 from torch import nn
-import warnings
-#warnings.filterwarnings(action='ignore')
 
 class resnet18(torch.nn.Module):
     def __init__(self, pretrained=True):
@@ -34,6 +32,7 @@ class resnet18(torch.nn.Module):
         feature2 = self.layer2(feature1)  # 1 / 8
         feature3 = self.layer3(feature2)  # 1 / 16
         feature4 = self.layer4(feature3)  # 1 / 32
+        
         # global average pooling to build tail
         tail = torch.mean(feature4, 3, keepdim=True)
         tail = torch.mean(tail, 2, keepdim=True)
@@ -185,7 +184,7 @@ class BiSeNet(torch.nn.Module):
             # build feature fusion module
             self.feature_fusion_module = FeatureFusionModule(num_classes, 1024)
         else:
-            logging.info('Error: unspport context_path network \n')
+            logging.info('Error: unsupported context_path network')
 
         # build final convolution
         self.conv = nn.Conv2d(in_channels=num_classes, out_channels=num_classes, kernel_size=1)

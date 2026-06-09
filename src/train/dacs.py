@@ -1,6 +1,6 @@
 """
-Domain Adaptation via Cross-domain Mixed Sampling (DACS)
-From the original implementation: github.com/vikolss/DACS
+    Domain Adaptation via Cross-domain Mixed Sampling (DACS)
+    Adapted from: github.com/vikolss/DACS
 """
 import copy
 import logging

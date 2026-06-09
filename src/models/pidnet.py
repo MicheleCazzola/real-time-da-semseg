@@ -1,6 +1,6 @@
 """
-PIDNet model definition
-From the original implementation: github.com/XuJiacong/PIDNet
+    PIDNet model definition
+    Source: github.com/XuJiacong/PIDNet
 """
 
 import logging
@@ -8,8 +8,6 @@ import logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-from src.losses.pidnet import pidnet_loss
 
 
 class BasicBlock(nn.Module):

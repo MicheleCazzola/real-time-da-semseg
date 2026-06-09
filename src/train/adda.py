@@ -1,3 +1,10 @@
+"""
+    AdaptSeg training loop implementation
+    Adapted from:
+    - github.com/wasidennis/AdaptSegNet
+    - github.com/Junjue-Wang/LoveDA
+"""
+
 import logging
 import os
 import torch
@@ -97,10 +104,6 @@ def train_adda(
 
         generator.train()
         discriminator.train()
-        
-        lr = scheduler.get_last_lr()[0] if scheduler is not None else optimizer_gen.param_groups[0]['lr']
-        disc_lr = scheduler_disc.get_last_lr()[0] if scheduler_disc is not None else optimizer_disc.param_groups[0]['lr']
-        logging.info(f"LR: {lr:.6f}, Disc LR: {disc_lr:.6f}")
 
         for i, (batch_source, batch_target) in enumerate(data_stream):
             for idx in range(len(batch_source)):

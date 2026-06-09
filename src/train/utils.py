@@ -1,120 +1,198 @@
 import os
-from torch.utils.data import DataLoader
-import albumentations as A
 
-from src.models.bisenet import BiSeNet
-from src.models.pidnet import PIDNet
-from src.models.stdc import STDC
-from src.dataset.dataset import LoveDA
-from src.utils.variables import TRAIN_DIR, VAL_DIR, IMG_PATH, MASK_PATH
-from src.train.bisenet import evaluate_bisenet
-from src.train.pidnet import evaluate_pidnet
-from src.train.stdc import evaluate_stdc
+from box.box import Box
+import torch
+import yaml
 
+from src.dataset.utils import trainset_setup
+from src.train.adda import adda_setup, train_adda
+from src.train.dacs import dacs_setup, train_dacs
+from src.train.iast import iast_setup, train_iast
+from src.train.train_model import train_model
+from src.utils.variables import ModelType, AdaptationMethod
 
-def trainset_setup(cfg, domain, g, seed_worker, num_workers, split_dir=None, img_dir=None, mask_dir=None, resize=True, augmentations=None, boundaries=False, img_names=False, shuffle=True, drop_last=True, reduce_factor=1):
-    
-    if augmentations is None:
-        augmentations = A.NoOp()
-    
-    downscale = (
-        A.Resize(cfg.data.downscale["height"], cfg.data.downscale["width"], p=1)
-        if cfg.data.downscale is not None else A.NoOp()
-    )
-    
-    resize_transform = A.Resize(cfg.data.resize["height"], cfg.data.resize["width"], p=1) if resize else A.NoOp()
-    
-    train_transform = A.Compose([
-        A.Normalize(mean=cfg.data.imagenet_mean, std=cfg.data.imagenet_std, p=1, max_pixel_value=255),
-        downscale,
-        augmentations,
-        resize_transform,
-        A.ToTensorV2(transpose_mask=True)
-    ])
-    
-    split_dir = split_dir if split_dir is not None else cfg.path.train_dir
-    img_dir = img_dir if img_dir is not None else cfg.path.images
-    mask_dir = mask_dir if mask_dir is not None else cfg.path.masks
-    
-    data_root = os.path.join(cfg.path.root, split_dir)
-    train_dataset = LoveDA(data_root, img_dir, mask_dir, directories=domain, transforms=train_transform, bd=boundaries, fname=img_names, reduce_factor=reduce_factor)
-    train_loader = DataLoader(
-        train_dataset, batch_size=cfg.data.batch_size, shuffle=shuffle, drop_last=drop_last, num_workers=num_workers, worker_init_fn=seed_worker, generator=g
-    )
-    
-    return train_dataset, train_loader
+def get_train_params(model_name):
+    match model_name:
+        case ModelType.DEEPLAB_V2.value:
+            bd_required = False
+            backbone_name = None
+            make_train_specific_losses = lambda _: {}
+        case ModelType.BISENET_V1.value | ModelType.BISENET_V1_RT.value:
+            bd_required = False
+            backbone_name = "resnet18" if model_name == ModelType.BISENET_V1_RT.value else "resnet101"
+            make_train_specific_losses = lambda train_result: {
+                "semantic": {
+                    k: v
+                    for k, v in train_result.items()
+                    if k not in ["train_losses", "val_losses", "train_mious", "val_mious", "train_ious", "val_ious"]
+                }
+            }
+        case ModelType.STDC1.value | ModelType.STDC2.value:
+            bd_required = False
+            backbone_name = "STDCNet813" if model_name == ModelType.STDC1.value else "STDCNet1446"
+            make_train_specific_losses = lambda train_result: {
+                "semantic": {
+                    k: v
+                    for k, v in train_result.items()
+                    if "sem" in k
+                    and k
+                    not in ["train_losses", "val_losses", "train_mious", "val_mious", "train_ious", "val_ious"]
+                },
+                "boundary": {k: v for k, v in train_result.items() if "boundary" in k},
+            }
+        case ModelType.PIDNET_S.value | ModelType.PIDNET_M.value | ModelType.PIDNET_L.value:
+            bd_required = True
+            backbone_name = None
+            make_train_specific_losses = lambda train_result: {
+                "detail": {
+                    k: v
+                    for k, v in train_result.items()
+                    if k not in ["train_losses", "val_losses", "train_mious", "val_mious", "train_ious", "val_ious"]
+                }
+            }
+        case _:
+            raise NotImplementedError(f"Model {model_name} not supported")
+        
+    return bd_required, backbone_name, make_train_specific_losses
 
-def validset_setup(cfg, domain, num_workers, g, seed_worker, boundaries=False, img_names=False, reduce_factor=1):
-    val_transform = A.Compose([
-        A.Normalize(mean=cfg.data.imagenet_mean, std=cfg.data.imagenet_std, p=1, max_pixel_value=255),
-        A.ToTensorV2(transpose_mask=True)
-    ])
-    val_root = os.path.join(cfg.path.root, cfg.path.val_dir)
-    val_dataset = LoveDA(val_root, cfg.path.images, cfg.path.masks, directories=domain, transforms=val_transform, bd=boundaries, fname=img_names, reduce_factor=reduce_factor)
-    val_loader = DataLoader(
-        val_dataset, batch_size=cfg.data.batch_size, shuffle=False, drop_last=False, num_workers=num_workers, worker_init_fn=seed_worker, generator=g
-    )
-    
-    return val_dataset, val_loader
-
-def evaluate_model(model, validloader, device, criterion):
-    
-    if isinstance(model, PIDNet):
-        val_loss, val_miou, val_mious_per_class = evaluate_pidnet(model, validloader, device)
-    elif isinstance(model, BiSeNet):
-        val_loss, val_miou, val_mious_per_class = evaluate_bisenet(model, validloader, criterion, device)
-    elif isinstance(model, STDC):
-        val_loss, val_miou, val_mious_per_class = evaluate_stdc(model, validloader, criterion, device)
+def train(
+    cfg, model, trainloader_source, trainloader_target, validloader, criterion, optimizer, scheduler, start_epoch, start_miou,
+    bd_required, make_train_specific_losses, output_dir, device, g, seed_worker, num_workers, reduce_factor, augmentations, iast_regenerate
+):
+    if cfg.training.adaptation is None:
+        train_result = train_model(
+            model,
+            cfg.model.model,
+            cfg.model.num_classes,
+            trainloader_source,
+            validloader,
+            criterion,
+            optimizer,
+            scheduler,
+            start_epoch,
+            cfg.training.last_epoch,
+            start_miou,
+            bd_required=bd_required,
+            checkpoint_dir=output_dir,
+            device=device,
+            log_frequency=10,
+        )
+        train_specific_losses = make_train_specific_losses(train_result)
+    elif cfg.training.adaptation == AdaptationMethod.ADDA.value:
+        discriminator, disc_criterion, disc_optimizer, disc_scheduler = adda_setup(cfg, device)
+        train_result = train_adda(
+            model,
+            discriminator,
+            cfg.model.model,
+            cfg.model.num_classes,
+            cfg.adda.lambda_adv,
+            trainloader_source,
+            trainloader_target,
+            validloader,
+            criterion,
+            disc_criterion,
+            optimizer,
+            disc_optimizer,
+            scheduler,
+            disc_scheduler,
+            start_epoch,
+            cfg.training.last_epoch,
+            start_miou,
+            bd_required=bd_required,
+            checkpoint_dir=output_dir,
+            device=device,
+            log_frequency=10,
+        )
+        train_specific_losses = make_train_specific_losses(train_result)
+        train_specific_losses.update(
+            {
+                "discriminator": {
+                    "train_losses_adda_disc_source": train_result.get("train_losses_disc_source", []),
+                    "train_losses_adda_disc_target": train_result.get("train_losses_disc_target", []),
+                }
+            }
+        )
+    elif cfg.training.adaptation == AdaptationMethod.DACS.value:
+        ema_model = dacs_setup(cfg, model, device)
+        train_result = train_dacs(
+            model,
+            ema_model,
+            cfg.model.model,
+            cfg.model.num_classes,
+            trainloader_source,
+            trainloader_target,
+            validloader,
+            criterion,
+            optimizer,
+            scheduler,
+            start_epoch,
+            cfg.training.last_epoch,
+            start_miou,
+            bd_required=bd_required,
+            checkpoint_dir=output_dir,
+            device=device,
+            log_frequency=10,
+            pixel_weight=cfg.dacs.pixel_weight,
+            pseudo_threshold=cfg.dacs.pseudo_threshold,
+            use_ema_for_pseudo=cfg.dacs.use_ema_for_pseudo,
+            alpha_teacher=cfg.dacs.alpha_teacher,
+            ignore_index=cfg.model.ignore_index
+        )
+        train_specific_losses = make_train_specific_losses(train_result)
+    elif cfg.training.adaptation == AdaptationMethod.IAST.value:
+        with open(os.path.join("configs", f"iast.yaml"), 'r') as f:
+            iast_cfg = Box(yaml.safe_load(f))
+            
+        _, trainloader_target = trainset_setup(
+            cfg,
+            cfg.path.target,
+            g,
+            seed_worker,
+            num_workers,
+            reduce_factor=reduce_factor,
+            boundaries=bd_required,
+            img_names=True,
+            shuffle=False,  # Important to keep track of pseudo-labels across epochs
+            drop_last=False,  # Important to keep track of pseudo-labels across epochs
+            resize=False
+        )
+        
+        model_D, criterion_D, criterion_ent, criterion_kd, optimizer_D, scheduler_D = iast_setup(iast_cfg, device)
+        criterion_ent = torch.nn.CrossEntropyLoss(ignore_index=cfg.model.ignore_index)
+        criterion_kd = torch.nn.KLDivLoss(reduction='batchmean')
+        train_result = train_iast(
+            model,
+            cfg.model.model,
+            model_D,
+            trainloader_source,
+            trainloader_target,
+            validloader,
+            criterion,
+            criterion_D,
+            criterion_ent,
+            criterion_kd,
+            optimizer,
+            optimizer_D,
+            scheduler,
+            scheduler_D,
+            cfg.training.last_epoch,
+            bd_required=bd_required,
+            cfg=cfg,
+            iast_cfg=iast_cfg,
+            trainset_build_params={
+                "reduce_factor": reduce_factor,
+                "g": g,
+                "seed_worker": seed_worker,
+                "num_workers": num_workers,
+                "augmentations": augmentations,
+            },
+            device=device,
+            checkpoint_dir=output_dir,
+            regenerate=iast_regenerate,
+            log_frequency=10,
+        )
+        train_specific_losses = make_train_specific_losses(train_result)
     else:
-        raise NotImplementedError("ADDA training is only implemented for PIDNet, BiSeNet and STDC models.")
+        raise NotImplementedError(f"Adaptation method {cfg.adaptation.adaptation_method} not supported")
     
-    return val_loss,val_miou,val_mious_per_class
-
-def train_forward_source(model, inputs, masks, boundaries, criterion):
-
-    if isinstance(model, PIDNet):
-        source_loss, [_, source_output, _], _, _ = model(inputs, masks, boundaries)
-        
-    elif isinstance(model, BiSeNet):
-        outputs, outputs16, outputs32 = model(inputs)
-    
-        loss1 = criterion(outputs, masks)
-        loss2 = criterion(outputs16, masks)
-        loss3 = criterion(outputs32, masks)
-        
-        source_output = outputs
-        source_loss = loss1 + loss2 + loss3
-        
-    elif isinstance(model, STDC):
-        # Must be modified when STDC will trained with boundary loss terms
-        outputs, outputs16, outputs32 = model(inputs)
-    
-        loss1 = criterion(outputs, masks)
-        loss2 = criterion(outputs16, masks)
-        loss3 = criterion(outputs32, masks)
-        
-        source_output = outputs
-        source_loss = loss1 + loss2 + loss3
-    else:
-        raise NotImplementedError("ADDA training is only implemented for PIDNet, BiSeNet and STDC models.")
-    
-    return source_loss, source_output
-
-def train_forward_target(model, inputs, return_all=False):
-
-    if isinstance(model, PIDNet):
-        _, [target_outputs], _, _ = model(inputs, None, None)
-        target_output = target_outputs[1]
-        
-    elif isinstance(model, BiSeNet):
-        target_outputs = model(inputs)
-        target_output = target_outputs[0]
-        
-    elif isinstance(model, STDC):
-        # Must be modified when STDC will trained with boundary loss terms
-        target_outputs = model(inputs)
-        target_output = target_outputs[0]
-    else:
-        raise NotImplementedError("ADDA training is only implemented for PIDNet, BiSeNet and STDC models.")
-    
-    return (target_outputs, target_output) if return_all else target_output
+    return train_result, train_specific_losses

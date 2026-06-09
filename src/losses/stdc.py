@@ -2,10 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .bisenet import BiSeNetLoss
+from src.losses.bisenet import BiSeNetLoss
 
 class DetailAggregateLoss(nn.Module):
-    def __init__(self, *args, **kwargs):
+    def __init__(self):
         super(DetailAggregateLoss, self).__init__()
         
         self.laplacian_kernel = torch.tensor(

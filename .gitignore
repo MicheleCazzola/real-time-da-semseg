@@ -172,6 +172,7 @@ cython_debug/
 # Python and Mac
 .python-version
 .DS_Store
+requirements_colab.txt
 
 # Models and checkpoints
 *.pth

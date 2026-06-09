@@ -1,5 +1,6 @@
 """
-Deeplab v2 model definition
+    DeeplabV2 model definition
+    Source: 
 """
 
 import torch
@@ -12,17 +13,23 @@ class Bottleneck(nn.Module):
         super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, stride=stride, bias=False)
         self.bn1 = nn.BatchNorm2d(planes, affine=True)
+        
         for i in self.bn1.parameters():
             i.requires_grad = False
+            
         padding = dilation
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=padding, bias=False, dilation=dilation)
         self.bn2 = nn.BatchNorm2d(planes, affine=True)
+        
         for i in self.bn2.parameters():
             i.requires_grad = False
+            
         self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
         self.bn3 = nn.BatchNorm2d(planes * 4, affine=True)
+        
         for i in self.bn3.parameters():
             i.requires_grad = False
+        
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
@@ -37,8 +44,10 @@ class Bottleneck(nn.Module):
         out = self.relu(out)
         out = self.conv3(out)
         out = self.bn3(out)
+        
         if self.downsample is not None:
             residual = self.downsample(x)
+            
         out += residual
         out = self.relu(out)
 

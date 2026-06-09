@@ -1,10 +1,6 @@
-import logging
 import os
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import numpy as np
-
-from src.utils.variables import categories
 
 def plot_losses(*losses, labels, title, y_label, best_epoch=None, num_ticks=5, save_to=None, show=False):
     
@@ -109,52 +105,3 @@ def plot_results(dir_path, labels, main_losses=None, mean_ious=None, ious_per_cl
             save_to=os.path.join(dir_path, "val_ious_per_class.png"),
             show=show
         )
-
-### Image visualization
-def plot_tensor_mask(mask_tensor, categories):
-
-    categories = dict(sorted(categories.items(), key=lambda item: item[1][0]))
-
-    # Convert mask tensor to numpy array
-    mask_array = mask_tensor.squeeze().numpy()
-
-    # Create a colored mask image
-    colored_mask = np.zeros((mask_array.shape[0], mask_array.shape[1], 3), dtype=np.uint8)
-    for i, (label, (value, color)) in enumerate(categories.items()):
-        mask = mask_array == i
-        colored_mask[mask] = color
-
-    # Display the colored mask
-    plt.figure(figsize=(8, 5))
-    plt.imshow(colored_mask)
-    plt.axis("off")
-
-    # Create a legend
-    legend_patches = [mpatches.Patch(color=np.array(color)/255, label=label) for label, (_, color) in categories.items()]
-    plt.legend(handles=legend_patches, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-    plt.show()
-
-def plot_class_distribution(urban_classes, rural_classes):
-    colors = [np.array(color)/255 for _, color in sorted(categories.values())]
-
-    wedges, texts, autotexts = plt.pie([v.cpu().numpy() for v in urban_classes.values()], labels=urban_classes.keys(), colors=colors, autopct='%1.1f%%', pctdistance=0.85, labeldistance=1.1, startangle=90)
-    for text in texts:
-        text.set_fontsize(12)
-    for autotext in autotexts:
-        autotext.set_fontsize(9)
-    plt.title('Urban Dataset', fontsize=16)
-    plt.tight_layout()
-    plt.show()
-
-    logging.info("urban_percentage = ", [float(autotext.get_text().strip('%')) for autotext in autotexts])
-
-    wedges, texts, autotexts= plt.pie([v.cpu().numpy() for v in rural_classes.values()], labels=rural_classes.keys(), colors=colors, autopct='%1.1f%%', pctdistance=0.85, labeldistance=1.1, startangle=90)
-    for text in texts:
-        text.set_fontsize(12)
-    for autotext in autotexts:
-        autotext.set_fontsize(9)
-    plt.title("Rural dataset", fontsize=16)
-    plt.tight_layout()
-    plt.show()
-
-    logging.info("rural_percentage = ", [float(autotext.get_text().strip('%')) for autotext in autotexts])

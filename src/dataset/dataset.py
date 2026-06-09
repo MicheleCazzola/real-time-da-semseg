@@ -1,5 +1,4 @@
 from collections import OrderedDict
-import logging
 import os
 
 from PIL import Image
@@ -8,36 +7,6 @@ import numpy as np
 import cv2
 import torch
 from torchvision.datasets.vision import VisionDataset
-
-def pil_loader(path, codify):
-    with open(path, 'rb') as f:
-        img = Image.open(f)
-        return img.convert(codify)
-
-def load_images(root_path, directory, img):
-    directory_path = root_path / directory
-    img_path = directory_path / img
-    if not img_path.is_dir():
-        raise RuntimeError(f"Image path {img_path} is not a directory")
-    
-    images = [item.name for item in img_path.iterdir()]
-
-    return images
-
-def generate_bd(mask, edge_pad=False, edge_size=2):
-
-    y_k_size = 6
-    x_k_size = 6
-
-    edge = cv2.Canny(mask, 0.1, 0.2)
-    kernel = np.ones((edge_size, edge_size), np.uint8)
-
-    if edge_pad:
-        edge = edge[y_k_size:-y_k_size, x_k_size:-x_k_size]
-        edge = np.pad(edge, ((y_k_size,y_k_size),(x_k_size,x_k_size)), mode='constant')
-    edge = (cv2.dilate(edge, kernel, iterations=1) > 50).astype(np.float32)
-
-    return edge
 
 class LoveDA(VisionDataset):
     label2color = OrderedDict(
@@ -144,8 +113,9 @@ class LoveDA(VisionDataset):
         directories = [directories] if isinstance(directories, str) else directories
 
         for d in directories:
-          image_names = load_images(root_path, d, img)
-          self.image_names.extend([(d, image_name) for image_name in image_names])
+            d = d.title()
+            image_names = self._load_images(root_path, d, img)
+            self.image_names.extend([(d, image_name) for image_name in image_names])
         
         if self.reduce_factor < 1:
             self._reduce()
@@ -155,8 +125,8 @@ class LoveDA(VisionDataset):
         image_path = os.path.join(self.root, dir, self.img_path, image_name)
         mask_path = os.path.join(self.root, dir, self.mask_path, image_name)
 
-        image = pil_loader(image_path, "RGB")
-        mask = pil_loader(mask_path, "L")
+        image = self._pil_loader(image_path, "RGB")
+        mask = self._pil_loader(mask_path, "L")
 
         image = np.array(image)
         mask = np.array(mask)
@@ -189,3 +159,33 @@ class LoveDA(VisionDataset):
         reduced_length = int(len(self.image_names) * self.reduce_factor)
         selected_indices = np.random.choice(self.__len__(), reduced_length, replace=False)
         self.image_names = [self.image_names[i] for i in selected_indices]
+    
+    def _pil_loader(self, path, codify):
+        with open(path, 'rb') as f:
+            img = Image.open(f)
+            return img.convert(codify)
+
+    def _load_images(self, root_path, directory, img):
+        directory_path = root_path / directory
+        img_path = directory_path / img
+        if not img_path.is_dir():
+            raise RuntimeError(f"Image path {img_path} is not a directory")
+        
+        images = [item.name for item in img_path.iterdir()]
+
+        return images
+
+def generate_bd(mask, edge_pad=False, edge_size=2):
+
+    y_k_size = 6
+    x_k_size = 6
+
+    edge = cv2.Canny(mask, 0.1, 0.2)
+    kernel = np.ones((edge_size, edge_size), np.uint8)
+
+    if edge_pad:
+        edge = edge[y_k_size:-y_k_size, x_k_size:-x_k_size]
+        edge = np.pad(edge, ((y_k_size,y_k_size),(x_k_size,x_k_size)), mode='constant')
+    edge = (cv2.dilate(edge, kernel, iterations=1) > 50).astype(np.float32)
+
+    return edge

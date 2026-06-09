@@ -3,7 +3,6 @@ import torch.nn.functional as F
 import torch.nn as nn
 
 def weighted_bce(bd_pre, target, mask=None, ignore_index=-1):
-    n, c, h, w = bd_pre.size()
     log_p = bd_pre.permute(0,2,3,1).contiguous().view(1, -1)
     target_t = target.view(1, -1)
 

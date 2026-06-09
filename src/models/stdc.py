@@ -1,6 +1,6 @@
 """
-STDC model definition
-From the original implementation: github.com/MichaelFan01/STDC-Seg
+    STDC model definition
+    Source: github.com/MichaelFan01/STDC-Seg
 """
 
 import logging

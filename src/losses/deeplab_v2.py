@@ -1,6 +1,4 @@
-import torch
 import torch.nn as nn
-
 
 class DeepLabLoss(nn.Module):
     def __init__(self, base_criterion):

@@ -45,7 +45,7 @@ training:
   evaluate: true
   measure: false
   resume: false
-  adaptation: "adda"
+  adaptation: null
   epochs: 100
   last_epoch: 30
   warmup_epochs: 5

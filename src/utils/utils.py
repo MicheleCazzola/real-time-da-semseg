@@ -1,16 +1,15 @@
-from pathlib import Path
 import os
 import json
 import logging
 import torch
 import random
-import gdown
 import numpy as np
 from box import Box
 import logging
+import argparse
 from functools import partial
 
-from src.utils.variables import categories
+from src.utils.variables import ModelType, Domain, AdaptationMethod
 
 def seed_worker(_):
     worker_seed = torch.initial_seed() % 2**32
@@ -50,10 +49,6 @@ def setup_logger(output_dir):
     logging.getLogger().addHandler(console_handler)
 
 def set_default_config(cfg, args):
-    """
-    Overwrites YAML config parameters with command-line arguments (if present).
-    Priority: argparse > YAML config.
-    """
     for key, value in cfg.items():
         if isinstance(value, (dict, Box)):
             set_default_config(value, args)
@@ -73,6 +68,7 @@ def load_checkpoint(chp_path, model, device, disc_model=None, optimizer=None, di
                 d.load_state_dict(s)
         else:
             disc_model.load_state_dict(checkpoint['disc_model'])
+        
     if optimizer is not None:
         optimizer.load_state_dict(checkpoint['optimizer'])
     if disc_optimizer is not None:
@@ -81,6 +77,7 @@ def load_checkpoint(chp_path, model, device, disc_model=None, optimizer=None, di
                 d.load_state_dict(s)
         else:
             disc_optimizer.load_state_dict(checkpoint['disc_optimizer'])
+            
     if scheduler is not None:
         scheduler.load_state_dict(checkpoint['scheduler'])
     if disc_scheduler is not None:
@@ -105,11 +102,13 @@ def save_checkpoint(path, epoch, model, disc_model=None, optimizer=None, disc_op
         'epoch': epoch,
         'model': model.state_dict()
     }
+    
     if disc_model is not None:
         if isinstance(disc_model, list):
             checkpoint['disc_model'] = [d.state_dict() for d in disc_model]
         else:
             checkpoint['disc_model'] = disc_model.state_dict()
+            
     if optimizer is not None:
         checkpoint['optimizer'] = optimizer.state_dict()
     if disc_optimizer is not None:
@@ -117,6 +116,7 @@ def save_checkpoint(path, epoch, model, disc_model=None, optimizer=None, disc_op
             checkpoint['disc_optimizer'] = [d.state_dict() for d in disc_optimizer]
         else:
             checkpoint['disc_optimizer'] = disc_optimizer.state_dict()
+            
     if scheduler is not None:
         checkpoint['scheduler'] = scheduler.state_dict()
     if disc_scheduler is not None:
@@ -124,29 +124,18 @@ def save_checkpoint(path, epoch, model, disc_model=None, optimizer=None, disc_op
             checkpoint['disc_scheduler'] = [d.state_dict() for d in disc_scheduler]
         else:
             checkpoint['disc_scheduler'] = disc_scheduler.state_dict()
+            
     if miou is not None:
         checkpoint['miou'] = float(miou)
     if ious is not None:
         checkpoint['ious'] = ious.tolist() if isinstance(ious, torch.Tensor) else ious
         
     torch.save(checkpoint, path)
-    
-# Load model weights
-def load_model_weights(weights_dir_name, weights_model_name, file_id):
-    weights_dir = Path(weights_dir_name)
-    if not weights_dir.exists():
-        weights_dir.mkdir(exist_ok=True)
-
-    weights_model = Path(weights_model_name)
-    if not weights_model.exists():
-        gdown.download(id=file_id, output=str(weights_model), quiet=False)
-        
-    return weights_dir, weights_model
 
 def get_num_workers(device):
     num_cpus = os.cpu_count()
     if device.type == 'cuda':
-        return 0                # Colab environment -> Issues with multiple workers and CUDA, set to 0 for safe execution
+        return 0                # Colab environment
     elif device.type == 'mps':
         return min(6, num_cpus // 2)                
     else:
@@ -159,19 +148,61 @@ def get_device():
         "cpu"
     )
 
-def get_mious_per_category(mious_per_class):
-    mious_per_category = {}
-    for i, cat in enumerate(categories.keys()):
-        if cat in mious_per_category:
-            mious_per_category[cat] += [mious_per_class[i].item()]
-        else:
-            mious_per_category[cat] = [mious_per_class[i].item()]
-            
-        logging.info(f"{cat} mIoU: {mious_per_class[i]:.2f}%")
-        
-    return mious_per_category
-
 def save_results(destination, **results):
     json_str = json.dumps(results, indent=4)
     with open(destination, 'w') as f:
         f.write(json_str)
+        
+def get_args():
+    parser = argparse.ArgumentParser(description='Train a semantic segmentation model on urban and rural datasets.')
+    parser.add_argument(
+        '--from-config',
+        type=str,
+        default=os.path.join('configs', 'config.yaml'),
+        help='Path to the YAML configuration file.',
+    )
+    parser.add_argument(
+        '--model', type=str, choices=ModelType.values(), help='The model architecture to use for training.'
+    )
+    parser.add_argument('--source', type=str, choices=Domain.values(), help='The source domain for training.')
+    parser.add_argument('--target', type=str, choices=Domain.values(), help='The target domain for training.')
+    parser.add_argument(
+        '--augment', action='store_true', help='Flag to indicate whether to apply data augmentation during training.'
+    )
+    parser.add_argument(
+        '--adaptation',
+        type=str,
+        choices=AdaptationMethod.values(),
+        help='The domain adaptation method to use for training.',
+    )
+    parser.add_argument('--train', action='store_true', help='Flag to indicate whether to train the model.')
+    parser.add_argument(
+        '--evaluate', action='store_true', help='Flag to indicate whether to evaluate the model on the test set.'
+    )
+    parser.add_argument(
+        '--measure',
+        action='store_true',
+        help='Flag to indicate whether to compute performance metrics after evaluation.',
+    )
+    parser.add_argument(
+        '--reduce-factor',
+        type=float,
+        default=1.0,
+        help='Factor (ratio) by which to reduce the dataset size for faster experimentation.',
+    )
+    parser.add_argument('--epochs', type=int, help='Number of training epochs.')
+    parser.add_argument(
+        '--output-dir', type=str, help='Directory where outputs (checkpoints, logs, results) will be saved.'
+    )
+    parser.add_argument(
+        '--iterations', type=int, default=1000, help='Number of iterations for performance measurement.'
+    )
+    parser.add_argument('--loss', type=str, help='Loss function to use for training.')
+    parser.add_argument('--checkpoint-path', type=str, help='Path to a checkpoint to resume training or for evaluation.')
+    parser.add_argument('--pretrained-path', type=str, help='Path to pretrained weights for model initialization.')
+    parser.add_argument('--last-epoch', type=int, help='The last epoch number to train up to (used for training across multiple runs).')
+    parser.add_argument('--warmup-epochs', type=int, help='Number of warmup epochs for learning rate scheduling.')
+    parser.add_argument('--iast-regenerate', action='store_true', help='Flag to indicate whether to regenerate pseudo-labels at the beginning of training and every N epochs during IAST training.')
+    args = parser.parse_args()
+    
+    return args
