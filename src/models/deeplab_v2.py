@@ -1,6 +1,6 @@
 """
     DeeplabV2 model definition
-    Source: 
+    Source: github.com/rulixiang/deeplab-pytorch
 """
 
 import torch
