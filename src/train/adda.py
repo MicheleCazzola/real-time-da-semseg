@@ -60,7 +60,7 @@ def adda_setup(cfg, device):
 def train_adda(
     generator, discriminator, gen_name, num_classes, lambda_adv, trainloader_source, trainloader_target, validloader, 
     criterion_gen, criterion_disc, optimizer_gen, optimizer_disc, scheduler, scheduler_disc, start_epoch, end_epoch,
-    start_miou, bd_required, checkpoint_dir, device, log_frequency, extended_debug=False
+    start_miou, bd_required, checkpoint_dir, device, log_frequency
 ):
     
     logging.info(f"{gen_name} - ADDA training")
@@ -135,76 +135,22 @@ def train_adda(
             batch_loss_gen_source, batch_task_specific_losses_gen_source = criterion_gen(outputs_source, gt_source)
             batch_loss_gen_source.backward()
             
-            # Retain grads
-            if extended_debug:
-                task_grads = [p.grad.detach() for p in generator.parameters() if p.grad is not None]
-                grad_norm_task = torch.norm(torch.stack([g.norm(2) for g in task_grads]))
-                old_grads = {p: p.grad.clone() for p in generator.parameters() if p.grad is not None}
-            
             train_loss_gen_source += batch_loss_gen_source.item() * inputs_source.size(0)
             
             # Train with target
             outputs_target = generator(inputs_target)
             pred_gen_target = get_main_output(outputs_target)
-            
-            # ANALYTICAL TRACKING: retain gradients on the direct output (logits)
-            if extended_debug:
-                pred_gen_target.retain_grad()  # Direct output of PIDNet (logits)
 
             # Feed logits to discriminator (avoid softmax attenuation)
             preds_target = F.softmax(pred_gen_target, dim=1)
-            if extended_debug:
-                preds_target.retain_grad()
-
             outputs_gen_target = discriminator(preds_target)
 
             batch_loss_gen_target = criterion_disc(outputs_gen_target, torch.zeros_like(outputs_gen_target))
-            
             epoch_adda_specific_losses["train_losses_gen_target"] += batch_loss_gen_target.item() * inputs_target.size(0)
             
             batch_loss_gen_target = lambda_adv * batch_loss_gen_target
             batch_loss_gen_target.backward()
             
-            if extended_debug:
-                grad_in_softmax = preds_target.grad.norm(2).item() if preds_target.grad is not None else 0.0
-                grad_out_softmax = pred_gen_target.grad.norm(2).item() if pred_gen_target.grad is not None else 0.0
-                
-                logging.info(f"\n{'='*50}")
-                logging.info(f"--- ANALYTICAL PROPAGATION ANALYSIS (Iter {i+1}) ---")
-                logging.info(f"1. Gradient from Disc (on Logits): {grad_in_softmax:.6f}")
-                logging.info(f"2. Gradient on PIDNet Logits: {grad_out_softmax:.6f}")
-                if grad_in_softmax > 0:
-                    logging.info(f"-> Survival through Input Mapping: {(grad_out_softmax/grad_in_softmax)*100:.2f}%")
-                
-                final_layer_grad = layer1_grad = None
-                for name, p in generator.named_parameters():
-                    if 'final_layer.conv2.weight' in name and p.grad is not None:
-                        adv_g = p.grad.detach() - old_grads[p] if p in old_grads else p.grad.detach()
-                        final_layer_grad = adv_g.norm(2).item()
-                    if 'layer1.0.conv1.weight' in name and p.grad is not None:
-                        adv_g = p.grad.detach() - old_grads[p] if p in old_grads else p.grad.detach()
-                        layer1_grad = adv_g.norm(2).item()
-
-                if final_layer_grad is not None and layer1_grad is not None:
-                    logging.info(f"\n3. Adv Magnitude at Head (final_layer.conv2): {final_layer_grad:.6f}")
-                    logging.info(f"4. Adv Magnitude at Base (layer1.0.conv1): {layer1_grad:.6f}")
-                    if final_layer_grad > 0:
-                        logging.info(f"-> Structural survival through PIDNet: {(layer1_grad/final_layer_grad)*100:.4f}%")
-                    else:
-                        logging.info("\n4. Could not compute structural survival (negative or zero gradient at final layer)")
-                else:
-                    logging.info("\n3. Could not compute structural survival (missing gradients in key layers)")
-                logging.info(f"{'='*50}\n")
-
-                # Compute adversarial gradient norms
-                adv_grads = [(p.grad.detach() - old_grads[p]) if p in old_grads else p.grad.detach() for p in generator.parameters() if p.grad is not None]
-                grad_norm_adv = torch.norm(torch.stack([g.norm(2) for g in adv_grads]))
-            
-                # Compute total gradient norms
-                grad_norm_total = torch.norm(torch.stack([p.grad.detach().norm(2) for p in generator.parameters() if p.grad is not None]))
-                
-                logging.info(f"Iter {i+1} | Grad Norm Task: {grad_norm_task:.4f} | Grad Norm Adv: {grad_norm_adv:.4f} | Grad Norm Total: {grad_norm_total:.4f}")
-
             # ===== Train discriminator =====
             # Unfreeze discriminator
             for param in discriminator.parameters():

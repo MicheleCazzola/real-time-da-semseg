@@ -95,9 +95,3 @@ adda:
   adda_step_size: 10
   adda_gamma: 0.1
   adda_momentum: 0.9
-
-dacs:
-  pixel_weight: "threshold"
-  pseudo_threshold: 0.968
-  use_ema_for_pseudo: true
-  alpha_teacher: 0.99

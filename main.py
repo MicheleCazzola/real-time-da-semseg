@@ -4,11 +4,6 @@ import yaml
 from box import Box
 from datetime import datetime
 
-import torch
-import torch.multiprocessing
-
-torch.multiprocessing.set_sharing_strategy('file_system')
-
 from src.dataset.dataset import LoveDA
 from src.dataset.augmentations import get_augmentations
 from src.metrics.resources import compute_performance_metrics
@@ -100,8 +95,8 @@ if __name__ == "__main__":
         )
         
         train_result, train_specific_losses = train(
-            cfg, model, trainloader_source, trainloader_target, validloader, criterion, optimizer, scheduler, start_epoch, start_miou,
-            bd_required, make_train_specific_losses, output_dir, device, g, seed_worker, num_workers, args.reduce_factor, augmentations, args.iast_regenerate
+            cfg, model, trainloader_source, trainloader_target, validloader, criterion, optimizer, scheduler, 
+            start_epoch, start_miou, bd_required, make_train_specific_losses, output_dir, device
         )
          
         save_results(os.path.join(output_dir, f"results.json"), **train_result)
