@@ -1,66 +1,119 @@
 # Real Time Domain Adaptation in Semantic Segmentation
 
-**[Important Notice]**: this is the temporary branch for the refactor of the project, which is still in progress. However, most of the code is already available.
+**Authors**:
+- [Michele Cazzola](https://github.com/MicheleCazzola): original and revised project
+- [Vincenzo Avantaggiato](https://github.com/VincenzoAvantaggiato): original project
+- [Marco De Luca](https://github.com/markdeluk): original project
 
-Implementation and comparison of several deep learning methods and Convolutional Neural Networks to tackle the problem of domain adaptation in real-time semantic segmentation.
+This original version of the project was developed within the course *Advanced Machine Learning* (Prof. Tatiana Tommasi, TA Claudia Cuttano), at Politecnico di Torino in the A.Y. 2024-25. The original version of the project is available [here](https://github.com/MicheleCazzola/real-time-da-semseg/releases/tag/v1.0).
 
-## Authors
-- [Vincenzo Avantaggiato](https://github.com/VincenzoAvantaggiato)
-- [Michele Cazzola](https://github.com/MicheleCazzola)
-- [Marco De Luca](https://github.com/markdeluk)
+## Overview
 
-## General information
-**Course**: `Advanced Machine Learning` (`Polytechnic of Turin`).  
-**Academic year**: 2024-25, developed from December 2024 to January 2025.  
-**Teachers**: Tatiana Tommasi, Claudia Cuttano.  
-**Topic**: implementation and comparison of the following models:
-- `DeepLabV2`
-- `PidNet`
-- Bilateral Segmentation Network (`BiSeNet`)
-- Short-Term Dense Concatenate (`STDC`) network
+This repository contains the code for the project "Real Time Domain Adaptation in Semantic Segmentation", which is a refactor of the original project developed for the course *Advanced Machine Learning* at Politecnico di Torino.
 
-using the following techniques to mitigate domain shift:
-- data augmentation
-- Adversarial Domain Adaptation (`ADDA`)
-- image-to-image translation (Domain Adaptation via Cross-Domain Mixed Sampling, `DACS`).
+We studied low-latency domain adaptation techniques for real-time semantic segmentation, focusing mainly on the PIDNet architecture and Adversarial Domain Adaptation (ADDA). Our benchmark is the LoveDA dataset, which contains images from two different domains (urban and rural) and is natively built for domain adaptation tasks in semantic segmentation.
 
-## Repository structure
+As domain adaptation strategies are often investigated on top of larger architectures (e.g. DeepLabV2), we applied them to PIDNet, proving their effectiveness in this context.
 
-The repository is structured as follows:
-- `models/`: definition of the models
-- `losses/`: definition of the losses (CrossEntropy, Bondary, Focal, OHEM)
-- `main.ipynb`: implementation of training, domain adaptation strategies and extensions
-- `results.ipynb`: performance computed in the various steps of the process
-- `report.pdf`: final report of the project, in PDF format
+Further updates on self-training techniques and extensions will be available soon.
 
-## Dataset
-The dataset used is LoveDA [[PDF](https://arxiv.org/pdf/2110.08733)], natively built for domain adaptation tasks in semantic segmentation. Indeed, it contains several images (with the related masks) divided into `urban` and `rural` domain.
+## Installation
 
-## Details
-The project is structured in several parts:
-- Performance comparison of DeepLabV2 and PidNet in single-domain (`urban`) setting
-- Training of PidNet in domain-shift setting (`urban` to `rural`)
-- Mitigation of domain shift using data augmentation on PidNet
-- Implementation of Adversarial Domain Adaptation and DACS on PidNet, to mitigate domain shift: these approaches, never tried before on PidNet and LoveDA (as January 2025), have been proven unsuccessful in this context
-- Comparison of PidNet with BiSeNet and STDC in single-domain and domain-shift approach
-- Extension to more sophisticate losses: `OHEM Cross Entropy Loss` and `Focal Loss` 
+This work is developed using:
+- `python=3.11`
+- `pytorch=2.11`
+- `torchvision=0.26`
+- `CUDA=12.8`
 
+To install the required dependencies, run:
+```
+pip install -r requirements.txt
+```
 
-We summarized our work and showed our results in the project report [[PDF](report.pdf)]
+To download the LoveDA dataset, please follow the instructions in the [LoveDA repository](https://github.com/Junjue-Wang/LoveDA).
 
-## Main References
-**Semantic Segmentation**: "A Brief Survey on Semantic Segmentation with Deep Learning", Shijie Hao, Yuan Zhou, Yanrong Guo [[PDF](https://arxiv.org/abs/1912.10230)] 
+The pretrained checkpoints for fine-tuning and domain adaptation are available in the repositories of the related works:
+- [PIDNet](https://github.com/XuJiacong/PIDNet)
+- [STDC-Seg](https://github.com/MichaelFan01/STDC-Seg)
+- [BiSeNetV1](https://github.com/CoinCheung/BiSeNet)
+- [DeepLabV2](https://github.com/rulixiang/deeplab-pytorch)
 
-**LoveDA dataset**: "LoveDA: A Remote Sensing Land-Cover Dataset for Domain Adaptive Semantic Segmentation", Junjue Wang, Zhuo Zheng, Ailong Ma, Xiaoyan Lu, Yanfei Zhong [[PDF](https://arxiv.org/abs/2110.08733)]
+Once the setup is finished, the repository should have the following structure:
 
-**DeepLab**: "DeepLab: Semantic Image Segmentation with Deep Convolutional Nets, Atrous Convolution, and Fully Connected CRFS", Liang-Chieh Chen, George Papandreou, Iasonas Kokkinos, Kevin Murphy, Alan L. Yuille [[PDF](https://arxiv.org/pdf/1606.00915.pdf)]
+```
+real-time-da-semseg/
+  ├── /path/to/data/        <- LoveDA dataset 
+  ├── /path/to/models/      <- Models and/or checkpoints
+  ├── assets/               <- Pictures used in the final report
+  ├── configs/              <- Configuration files
+  ├── src/
+    ├── dataset/            <- Dataset loading and processing
+    ├── losses/             <- Loss functions
+    ├── metrics/            <- Segmentation and resource metrics
+    ├── models/             <- Segmentation and DA models
+    ├── train/              <- Training and evaluation logic
+    ├── utils/              <- Utilities
+  ├── main.py               <- Entry point
+  ├── report.pdf            <- Final report/paper
+  ├── [other files]
+```
 
-**PidNet**: "PidNet: A Real-time Semantic Segmentation Network Inspired by PID Controllers", Jiacong Xu, Zixiang Xiong, Shankar P. Bhattacharyya [[PDF](https://arxiv.org/abs/2206.02066)]
+## Run
 
-**Adversarial Domain Adaptation**: "Learning to Adapt Structured Output Space for Semantic Segmentation", Yi-Hsuan Tsai, Wei-Chih Hung, Samuel Schulter, Kihyuk Sohn, Ming-Hsuan Yang, Manmohan Chandraker [[PDF](https://openaccess.thecvf.com/content_cvpr_2018/papers/Tsai_Learning_to_Adapt_CVPR_2018_paper.pdf)]
+To perform our same fine-tuning operations, run:
+```
+python main.py --train \
+    --model <MODEL_NAME> \
+    --source <SOURCE_DOMAIN> \
+    --target <TARGET_DOMAIN> \
+    --adaptation adda \
+    --checkpoint-path <CHECKPOINT_PATH> \
+    --output-dir <OUTPUT_DIR>
+```
 
-**DACS**: "DACS: Domain Adaptation via Cross-domain Mixed Sampling", Wilhelm Tranheden, Viktor Olsson, Juliano Pinto, Lennart Svensson [[PDF](https://arxiv.org/pdf/2007.08702.pdf)]
+and set:
+- `<MODEL_NAME>` to `pidnet_s`
+- `<SOURCE_DOMAIN>` to `urban`
+- `<TARGET_DOMAIN>` to `rural`
+- `<CHECKPOINT_PATH>` to the path of the pretrained checkpoint for PIDNet
+- `<OUTPUT_DIR>` to the path of the directory where the results will be saved
 
-**BiSeNet**: "BiSeNet: Bilateral Segmentation Network for Real-time Semantic Segmentation", Changqian Yu, Jingbo Wang, Chao Peng, Changxin Gao, Gang Yu, Nong Sang [[PDF](https://arxiv.org/pdf/1808.00897.pdf)]
+It is possible to train a model without any domain adaptation strategy. In that case, it is sufficient to drop the `--adaptation` argument.
+The available models are `deeplab_v2`, `bisenet_v1`, `bisenet_v1_rt`, `stdc1`,  `pidnet_s`.
 
-**STDC**: "Rethinking BiSeNet For Real-time Semantic Segmentation", Mingyuan Fan, Shenqi Lai, Junshi Huang, Xiaoming Wei, Zhenhua Chai, Junfeng Luo, Xiaolin Wei [[PDF](https://arxiv.org/abs/2104.13188)]
+To evaluate a pretrained model, run:
+```
+python main.py --evaluate \
+    --model <MODEL_NAME> \
+    --target <DOMAIN> \
+    --pretrained-path <PRETRAINED_MODEL_PATH> \
+    --output-dir <OUTPUT_DIR>
+```
+
+and set:
+- `<PRETRAINED_MODEL_PATH>` to the path of the pretrained checkpoint for PIDNet
+- `<OUTPUT_DIR>` to the path of the directory where the results will be saved
+
+To evaluate the resource usage (latency, FPS, parameters, FLOPs), run:
+```
+python main.py --measure \
+    --model <MODEL_NAME> \
+    --output-dir <OUTPUT_DIR>
+```
+
+and set `<OUTPUT_DIR>` as above.
+
+If you want more control on the run parameters, you can directly edit the [configuration file](./configs/config.yaml). For indications on the available parameters, run:
+
+```
+python main.py --help
+```
+
+## Acknowledgements
+This work relies in part on the following:
+- [PIDNet](https://github.com/XuJiacong/PIDNet)
+- [AdaptSegNet](https://github.com/wasidennis/AdaptSegNet)
+- [LoveDA](https://github.com/Junjue-Wang/LoveDA)
+- [BiSeNetV1](https://github.com/CoinCheung/BiSeNet)
+- [STDC-Seg](https://github.com/MichaelFan01/STDC-Seg)
+- [DeepLabV2](https://github.com/rulixiang/deeplab-pytorch)
