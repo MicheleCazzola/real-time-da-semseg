@@ -190,4 +190,7 @@ outputs/
 resources/
 
 # Notebooks
-playground.ipynb
+*.ipynb
+
+# Scripts
+scripts/
