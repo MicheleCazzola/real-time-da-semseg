@@ -13,7 +13,7 @@ from src.models.bisenet import BiSeNet
 from src.models.pidnet import PIDNet
 from src.models.stdc import STDC
 from src.train.train_model import evaluate_model
-from src.utils.utils import get_mious_per_category, save_checkpoint
+from src.utils.utils import save_checkpoint
 
 
 def oneMix(mask, data=None, target=None):

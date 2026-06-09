@@ -12,7 +12,7 @@ from src.train.iast import iast_setup, train_iast
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 from src.dataset.dataset import LoveDA
-from src.dataset.augmentations import get_augmentations, get_nop_augmentation
+from src.dataset.augmentations import get_augmentations
 from src.metrics.resources import compute_performance_metrics
 from src.train.adda_multi import adda_multi_setup, train_adda_multi
 from src.train.train_model import train_model, setup_model, evaluate_model
@@ -21,7 +21,6 @@ from src.utils.plot import plot_results
 from src.utils.utils import set_default_config, set_seed, get_num_workers, setup_logger, get_device, save_results
 from src.utils.variables import ModelType, Domain, AdaptationMethod
 from src.train.utils import trainset_setup, validset_setup
-from src.train.deeplab_v2 import deeplab_v2_model_setup, train_deeplab_v2, evaluate_deeplab_v2
 from src.train.adda import adda_setup, train_adda
 from src.train.dacs import dacs_setup, train_dacs
 

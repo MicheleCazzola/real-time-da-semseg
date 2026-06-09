@@ -10,7 +10,7 @@ from src.losses.deeplab_v2 import DeepLabLoss
 from src.models.bisenet import BiSeNet
 from src.models.deeplab_v2 import get_deeplab_v2
 from src.models.stdc import STDC
-from src.train.pidnet import get_pidnet
+from src.models.pidnet import get_pidnet
 
 from src.losses.focal import FocalLoss
 from src.losses.ohem import OHEMCrossEntropy

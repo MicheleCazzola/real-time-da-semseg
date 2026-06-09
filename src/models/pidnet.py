@@ -3,6 +3,8 @@ PIDNet model definition
 From the original implementation: github.com/XuJiacong/PIDNet
 """
 
+import logging
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -653,46 +655,35 @@ class PIDNet(nn.Module):
         else:
             return x_
 
+def get_pidnet(model_name, num_classes, pretrained_weights, imgnet_pretrained) -> PIDNet:
 
-class FullPIDNetModel(nn.Module):
+    if 's' in model_name:
+        model = PIDNet(m=2, n=3, num_classes=num_classes, planes=32, ppm_planes=96, head_planes=128, augment=True)
+    elif 'm' in model_name:
+        model = PIDNet(m=2, n=3, num_classes=num_classes, planes=64, ppm_planes=96, head_planes=128, augment=True)
+    else:
+        model = PIDNet(m=3, n=4, num_classes=num_classes, planes=64, ppm_planes=112, head_planes=256, augment=True)
 
-    def __init__(self, model, sem_loss, bd_loss, ignore_index=-1):
-        super(FullPIDNetModel, self).__init__()
-        self.model = model
-        self.sem_loss = sem_loss
-        self.bd_loss = bd_loss
-        self.ignore_index = ignore_index
+    if imgnet_pretrained:
+        pretrained_state = torch.load(pretrained_weights, map_location='cpu')
+        model_dict = model.state_dict()
+        pretrained_state = {k: v for k, v in pretrained_state.items() if (k in model_dict and v.shape == model_dict[k].shape)}
+        model_dict.update(pretrained_state)
+        pretrained_param_keys = pretrained_state
+        model.load_state_dict(model_dict, strict = False)
+        logging.info(f"Loaded {len(pretrained_state)} parameters from ImageNet pretrained weights")
+    else:
+        pretrained_dict = torch.load(pretrained_weights, map_location='cpu')
+        model_dict = model.state_dict()
+        pretrained_dict = {k[6:]: v for k, v in pretrained_dict.items() if (k[6:] in model_dict and v.shape == model_dict[k[6:]].shape)}
+        pretrained_param_keys = pretrained_dict
+        model_dict.update(pretrained_dict)
+        model.load_state_dict(model_dict, strict = False)
+        logging.info(f"Loaded {len(pretrained_dict)} parameters from pretrained weights")
 
-    def pixel_acc(self, pred, label):
-        _, preds = torch.max(pred, dim=1)
-        valid = (label != self.ignore_index).long()
-        acc_sum = torch.sum(valid * (preds == label).long())
-        pixel_sum = torch.sum(valid)
-        acc = acc_sum.float() / (pixel_sum.float() + 1e-10)
-        return acc
+    fresh_params = [p for k, p in model.named_parameters() if k not in pretrained_param_keys]
+    pretrained_params = [p for k, p in model.named_parameters() if k in pretrained_param_keys]
+    param_groups = [pretrained_params, fresh_params]
+    
+    return model, param_groups
 
-    def forward(self, inputs, labels, bd_gt, *args, **kwargs):
-        outputs = self.model(inputs, *args, **kwargs)
-
-        if labels is None:
-            h, w = inputs.size(2), inputs.size(3)
-        else:
-            h, w = labels.size(1), labels.size(2)
-
-        ph, pw = outputs[0].size(2), outputs[0].size(3)
-        if ph != h or pw != w:
-            for i in range(len(outputs)):
-                outputs[i] = F.interpolate(
-                    outputs[i], size=(h, w), mode="bilinear", align_corners=True
-                )  # from original configs
-
-        if bd_gt is None:
-            return None, outputs, None, None
-
-        acc = self.pixel_acc(outputs[-2], labels)
-
-        loss_s, loss_b, loss_sb = pidnet_loss(outputs, labels, self.sem_loss, self.bd_loss, self.ignore_index, bd_gt)
-
-        loss = loss_s + loss_b + loss_sb
-
-        return torch.unsqueeze(loss, 0), outputs, acc, [loss_s, loss_b, loss_sb]
