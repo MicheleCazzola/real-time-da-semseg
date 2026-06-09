@@ -171,6 +171,12 @@ cython_debug/
 
 # Python and Mac
 .python-version
+# MD files except README.md
+*.md
+!README.md
+
+# Python and Mac
+.python-version
 .DS_Store
 requirements_colab.txt
 
@@ -179,8 +185,12 @@ requirements_colab.txt
 *.pth.tar
 
 # Temporary files
+
+# Temporary files
 temp/
 tmp/
+
+# Data
 
 # Data
 data/
