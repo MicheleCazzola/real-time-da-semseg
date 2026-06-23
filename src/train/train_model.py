@@ -158,7 +158,7 @@ def evaluate_model(model, model_name, num_classes, dataloader, criterion, bd_req
     tot_loss = 0.0
     data_len, tot_batches = 0, len(dataloader)
     metric = MeanIoU(num_classes=num_classes).to(device)
-
+    
     for i, batch in enumerate(dataloader):
         try:
             for idx in range(len(batch)):
@@ -195,6 +195,26 @@ def evaluate_model(model, model_name, num_classes, dataloader, criterion, bd_req
             else:
                 pred = outputs
                 
+            # normalized_pred = torch.softmax(pred, dim=1)
+            # assert normalized_pred.shape[0] == 1 and normalized_pred.shape[1] == num_classes
+            
+            # sq_normalized_pred = normalized_pred.squeeze(0)  # Remove batch dimension
+            # sq_masks = masks.squeeze(0)  # Remove batch dimension
+            
+            # idx = f"{i:04d}"
+            
+            # DOMAIN = "urban"
+            # if i == 0:
+            #     SAVE_GT = not os.path.exists(os.path.join("eval_objects", DOMAIN, "gt"))
+            
+            # os.makedirs(os.path.join("eval_objects", DOMAIN, model_name), exist_ok=True)
+            # torch.save(sq_normalized_pred.cpu(), os.path.join("eval_objects", DOMAIN, model_name, f"{idx}.pt"))
+            
+            # if SAVE_GT:
+            #     os.makedirs(os.path.join("eval_objects", DOMAIN, "gt"), exist_ok=True)
+            #     torch.save(sq_masks.cpu(), os.path.join("eval_objects", DOMAIN, "gt", f"{idx}.pt"))
+                
+            # Update mIoU metric
             metric.update(pred, masks)
             current_miou, _ = metric.compute()
             
@@ -208,7 +228,7 @@ def evaluate_model(model, model_name, num_classes, dataloader, criterion, bd_req
     
     return tot_loss / data_len, miou.item(), ious.tolist()
 
-def train_model(model, model_name, num_classes, trainloader, validloader, criterion, optimizer, scheduler, start_epoch, end_epoch, start_miou, bd_required, checkpoint_dir, device, log_frequency):
+def train_model(model, model_name, num_classes, trainloader, validloader, criterion, optimizer, scheduler, start_epoch, end_epoch, start_miou, bd_required, checkpoint_dir, device, log_frequency, validloader_adj=None):
     logging.info(f"{model_name} - Training")
     
     logging.info(f"Training epochs: {end_epoch} (from {start_epoch + 1} to {end_epoch})")
@@ -218,6 +238,9 @@ def train_model(model, model_name, num_classes, trainloader, validloader, criter
     train_mious, val_mious = [], []
     train_ious, val_ious = [], []
     best_epoch, best_val_miou = start_epoch - 1, start_miou
+    
+    if validloader_adj is not None:
+        val_losses_adj, val_mious_adj, val_ious_adj = [], [], []
 
     metric = MeanIoU(num_classes=num_classes).to(device)
     for epoch in range(start_epoch, end_epoch):
@@ -286,7 +309,7 @@ def train_model(model, model_name, num_classes, trainloader, validloader, criter
         train_epoch_miou = train_epoch_miou.item()
         train_epoch_ious = train_epoch_ious.tolist()
 
-        val_loss, val_epoch_miou, val_epoch_ious = evaluate_model(model, model_name, num_classes, validloader, criterion, bd_required, epoch, end_epoch, device, log_frequency)
+        val_loss, val_epoch_miou, val_epoch_ious = evaluate_model(model, model_name, num_classes, validloader, criterion, bd_required, epoch, end_epoch, device, log_frequency)  
         
         train_losses.append(float(train_loss))
         val_losses.append(float(val_loss))
@@ -297,8 +320,17 @@ def train_model(model, model_name, num_classes, trainloader, validloader, criter
         train_ious.append(train_epoch_ious)
         val_ious.append(val_epoch_ious)
         
+        if validloader_adj is not None:
+            val_loss_adj, val_epoch_miou_adj, val_epoch_ious_adj = evaluate_model(model, model_name, num_classes, validloader_adj, criterion, bd_required, epoch, end_epoch, device, log_frequency)
+            val_losses_adj.append(float(val_loss_adj))
+            val_mious_adj.append(val_epoch_miou_adj)
+            val_ious_adj.append(val_epoch_ious_adj)
+        
         # Logging
-        logging.info(f"Epoch {epoch + 1}/{end_epoch} | Train Loss: {train_loss:.4f} | Train mIoU (%): {train_epoch_miou:.2f} | Val Loss: {val_loss:.4f} | Val mIoU (%): {val_epoch_miou:.2f}")
+        msg = f"Epoch {epoch + 1}/{end_epoch} | Train Loss: {train_loss:.4f} | Train mIoU (%): {train_epoch_miou:.2f} | Val Loss: {val_loss:.4f} | Val mIoU (%): {val_epoch_miou:.2f}"
+        if validloader_adj is not None:
+            msg += f" | Val Loss Adj: {val_loss_adj:.4f} | Val mIoU Adj (%): {val_epoch_miou_adj:.2f}"
+        logging.info(msg)
         
         # Checkpointing
         if best_val_miou is None or val_epoch_miou > best_val_miou:
@@ -321,7 +353,7 @@ def train_model(model, model_name, num_classes, trainloader, validloader, criter
     last_ious = val_ious[-1] if len(val_ious) > 0 else None
     save_checkpoint(last_chp_path, end_epoch, model, optimizer=optimizer, scheduler=scheduler, miou=last_miou, ious=last_ious)
 
-    return {
+    res = {
         "train_losses": train_losses,
         "val_losses": val_losses,
         **train_task_specific_losses,
@@ -330,3 +362,10 @@ def train_model(model, model_name, num_classes, trainloader, validloader, criter
         "train_ious": train_ious,
         "val_ious": val_ious
     }
+    
+    if validloader_adj is not None:
+        res["val_losses_adj"] = val_losses_adj
+        res["val_mious_adj"] = val_mious_adj
+        res["val_ious_adj"] = val_ious_adj
+    
+    return res

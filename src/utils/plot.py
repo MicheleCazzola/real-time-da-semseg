@@ -35,15 +35,18 @@ def plot_results(dir_path, labels, main_losses=None, mean_ious=None, ious_per_cl
 
     train_ious = list(np.array(ious_per_class["train_ious"]).T) if "train_ious" in ious_per_class else None
     val_ious = list(np.array(ious_per_class["val_ious"]).T) if "val_ious" in ious_per_class else None
+    val_ious_adj = list(np.array(ious_per_class["val_ious_adj"]).T) if "val_ious_adj" in ious_per_class else None
     
     best_epoch = np.argmax(mean_ious["val_mious"]) + 1 if mean_ious is not None else None
     
     # Training/Validation Losses
     if main_losses is not None:
+        losses_to_plot = [main_losses["train_losses"], main_losses["val_losses"]]
+        if "val_losses_adj" in main_losses:
+            losses_to_plot.append(main_losses["val_losses_adj"])
         plot_losses(
-            main_losses["train_losses"],
-            main_losses["val_losses"],
-            labels=["Training", "Validation"],
+            *losses_to_plot,
+            labels=["Training", "Validation"] + (["Validation Adj"] if "val_losses_adj" in main_losses else []),
             title="Loss",
             y_label="Loss",
             best_epoch=best_epoch,
@@ -68,10 +71,12 @@ def plot_results(dir_path, labels, main_losses=None, mean_ious=None, ious_per_cl
     
     # mIoU
     if mean_ious is not None:
+        mean_ious_to_plot = [mean_ious["train_mious"], mean_ious["val_mious"]]
+        if "val_mious_adj" in mean_ious:
+            mean_ious_to_plot.append(mean_ious["val_mious_adj"])
         plot_losses(
-            mean_ious["train_mious"],
-            mean_ious["val_mious"],
-            labels=["Training", "Validation"],
+            *mean_ious_to_plot,
+            labels=["Training", "Validation"] + (["Validation Adj"] if "val_mious_adj" in mean_ious else []),
             title="Mean Intersection over Union (mIoU)",
             y_label="mIoU (%)",
             best_epoch=best_epoch,
@@ -95,9 +100,12 @@ def plot_results(dir_path, labels, main_losses=None, mean_ious=None, ious_per_cl
     
     # IoU per class (val)
     if val_ious is not None:
+        val_ious_to_plot = val_ious
+        if val_ious_adj is not None:
+            val_ious_to_plot += val_ious_adj
         plot_losses(
-            *val_ious,
-            labels=[label for label in labels],
+            *val_ious_to_plot,
+            labels=[label for label in labels] + ([f"{label} (Val Adj)" for label in labels] if val_ious_adj is not None else []),
             title="Validation Intersection over Union (IoU) per Class",
             y_label="IoU (%)",
             best_epoch=best_epoch,

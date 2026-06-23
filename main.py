@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import yaml
@@ -94,8 +95,21 @@ if __name__ == "__main__":
             boundaries=bd_required,
         )
         
+        if cfg.training.double_eval:
+            validset_adj, validloader_adj = validset_setup(
+                cfg,
+                "urban" if cfg.path.target == "rural" else "rural",
+                num_workers,
+                g,
+                seed_worker,
+                reduce_factor=args.reduce_factor,
+                boundaries=bd_required,
+            )
+        else:
+            validset_adj, validloader_adj = None, None
+        
         train_result, train_specific_losses = train(
-            cfg, model, trainloader_source, trainloader_target, validloader, criterion, optimizer, scheduler, 
+            cfg, model, trainloader_source, trainloader_target, validloader, validloader_adj, criterion, optimizer, scheduler, 
             start_epoch, start_miou, bd_required, make_train_specific_losses, output_dir, device
         )
          
@@ -105,13 +119,13 @@ if __name__ == "__main__":
             dir_path=output_dir,
             labels=labels,
             main_losses=dict(
-                zip(["train_losses", "val_losses"], list(map(train_result.get, ["train_losses", "val_losses"])))
+                zip(["train_losses", "val_losses"] + (["val_losses_adj"] if validloader_adj is not None else []), list(map(train_result.get, ["train_losses", "val_losses"] + (["val_losses_adj"] if validloader_adj is not None else []))))
             ),
             mean_ious=dict(
-                zip(["train_mious", "val_mious"], list(map(train_result.get, ["train_mious", "val_mious"])))
+                zip(["train_mious", "val_mious"] + (["val_mious_adj"] if validloader_adj is not None else []), list(map(train_result.get, ["train_mious", "val_mious"] + (["val_mious_adj"] if validloader_adj is not None else []))))
             ),
             ious_per_class=dict(
-                zip(["train_ious", "val_ious"], list(map(train_result.get, ["train_ious", "val_ious"])))
+                zip(["train_ious", "val_ious"] + (["val_ious_adj"] if validloader_adj is not None else []), list(map(train_result.get, ["train_ious", "val_ious"] + (["val_ious_adj"] if validloader_adj is not None else []))))
             ),
             train_losses=train_specific_losses,
             show=False,
@@ -130,6 +144,9 @@ if __name__ == "__main__":
         loss, miou, ious = evaluate_model(model, cfg.model.model, cfg.model.num_classes, validloader, criterion, bd_required, -1, 0, device, 1)
         
         save_results(os.path.join(output_dir, f"results.json"), val_loss=loss, val_miou=miou, val_ious=ious)
+        
+        # with open(os.path.join(output_dir, f"uq_infos.json"), 'w') as f:
+        #     json.dump(uq_infos, f, indent=4)
 
     if cfg.training.measure:
         resource_metrics = compute_performance_metrics(

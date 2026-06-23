@@ -15,7 +15,7 @@ path:
 data:
   imagenet_mean: [0.485, 0.456, 0.406]
   imagenet_std: [0.229, 0.224, 0.225]
-  batch_size: 8
+  batch_size: 12
   dimensions:
     height: 1024
     width: 1024
@@ -43,13 +43,14 @@ model:
 training:
   train: true
   evaluate: true
+  double_eval: false
   measure: false
   resume: false
   adaptation: null
-  epochs: 100
+  epochs: 50
   last_epoch: 30
-  warmup_epochs: 5
-  loss: "cross_entropy"
+  warmup_epochs: 0
+  loss: "ohem"
   weighted_loss: false
   ohem_keep: 32768
   ohem_threshold: 0.9
@@ -60,8 +61,8 @@ training:
   eta_min: 1.e-6
   learning_rate: 
     pidnet_s: 
-      - 1.25e-4
-      - 1.25e-3
+      - 1.e-4
+      - 1.e-3
     bisenet_v1_rt:
       - 1.e-4
       - 1.e-3

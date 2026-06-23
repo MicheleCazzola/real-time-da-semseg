@@ -47,7 +47,7 @@ def get_train_params(model_name):
     return bd_required, backbone_name, make_train_specific_losses
 
 def train(
-    cfg, model, trainloader_source, trainloader_target, validloader, criterion, optimizer, scheduler, 
+    cfg, model, trainloader_source, trainloader_target, validloader, validloader_adj, criterion, optimizer, scheduler, 
     start_epoch, start_miou, bd_required, make_train_specific_losses, output_dir, device
 ):
     if cfg.training.adaptation is None:
@@ -67,6 +67,7 @@ def train(
             checkpoint_dir=output_dir,
             device=device,
             log_frequency=10,
+            validloader_adj=validloader_adj
         )
         train_specific_losses = make_train_specific_losses(train_result)
     elif cfg.training.adaptation == AdaptationMethod.ADDA.value:

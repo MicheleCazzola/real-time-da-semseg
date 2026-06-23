@@ -192,12 +192,13 @@ def get_args():
     )
     parser.add_argument('--epochs', type=int, help='Number of training epochs.')
     parser.add_argument('--output-dir', type=str, help='Directory where outputs (checkpoints, logs, results) will be saved.')
-    parser.add_argument( '--iterations', type=int, default=1000, help='Number of iterations for performance measurement.')
+    parser.add_argument('--iterations', type=int, default=1000, help='Number of iterations for performance measurement.')
     parser.add_argument('--loss', type=str, help='Loss function to use for training.')
     parser.add_argument('--checkpoint-path', type=str, help='Path to a checkpoint to resume training or for evaluation.')
     parser.add_argument('--pretrained-path', type=str, help='Path to pretrained weights for model initialization.')
     parser.add_argument('--last-epoch', type=int, help='The last epoch number to train up to (used for training across multiple runs).')
     parser.add_argument('--warmup-epochs', type=int, help='Number of warmup epochs for learning rate scheduling.')
+    parser.add_argument('--double-eval', action=argparse.BooleanOptionalAction, help='Flag to indicate whether to evaluate the model on both domains.')
     args = parser.parse_args()
     
     return args
