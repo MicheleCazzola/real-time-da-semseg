@@ -196,9 +196,11 @@ tmp/
 data/
 stats/
 
-# Results (temporary)
+# Results
 outputs/
+outputs*/
 resources/
+eval_objects
 
 # Notebooks
 *.ipynb
