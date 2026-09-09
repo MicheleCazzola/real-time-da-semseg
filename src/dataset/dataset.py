@@ -175,7 +175,7 @@ class LoveDA(VisionDataset):
 
         return images
 
-def generate_bd(mask, edge_pad=False, edge_size=2):
+def generate_bd(mask, edge_pad=False, edge_size=2, iterations=1):
 
     y_k_size = 6
     x_k_size = 6
@@ -186,6 +186,6 @@ def generate_bd(mask, edge_pad=False, edge_size=2):
     if edge_pad:
         edge = edge[y_k_size:-y_k_size, x_k_size:-x_k_size]
         edge = np.pad(edge, ((y_k_size,y_k_size),(x_k_size,x_k_size)), mode='constant')
-    edge = (cv2.dilate(edge, kernel, iterations=1) > 50).astype(np.float32)
+    edge = (cv2.dilate(edge, kernel, iterations=iterations) > 50).astype(np.float32)
 
     return edge

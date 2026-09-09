@@ -195,24 +195,26 @@ def evaluate_model(model, model_name, num_classes, dataloader, criterion, bd_req
             else:
                 pred = outputs
                 
-            # normalized_pred = torch.softmax(pred, dim=1)
-            # assert normalized_pred.shape[0] == 1 and normalized_pred.shape[1] == num_classes
+            normalized_pred = torch.softmax(pred, dim=1)
+            assert normalized_pred.shape[0] == 1 and normalized_pred.shape[1] == num_classes
             
-            # sq_normalized_pred = normalized_pred.squeeze(0)  # Remove batch dimension
-            # sq_masks = masks.squeeze(0)  # Remove batch dimension
+            sq_normalized_pred = normalized_pred.squeeze(0)  # Remove batch dimension
+            #sq_masks = masks.squeeze(0)  # Remove batch dimension
             
-            # idx = f"{i:04d}"
+            idx = f"{i:04d}"
             
-            # DOMAIN = "urban"
+            DOMAIN = "rural"
+            ROOT = "/Volumes/TOSHIBA/real_time_da_semseg_eval_objects" #"eval_objects"
+            FOLDER = f"{model_name}"
             # if i == 0:
-            #     SAVE_GT = not os.path.exists(os.path.join("eval_objects", DOMAIN, "gt"))
+            #     SAVE_GT = not os.path.exists(os.path.join(ROOT, DOMAIN, "gt"))
             
-            # os.makedirs(os.path.join("eval_objects", DOMAIN, model_name), exist_ok=True)
-            # torch.save(sq_normalized_pred.cpu(), os.path.join("eval_objects", DOMAIN, model_name, f"{idx}.pt"))
+            os.makedirs(os.path.join(ROOT, DOMAIN, FOLDER), exist_ok=True)
+            torch.save(sq_normalized_pred.cpu(), os.path.join(ROOT, DOMAIN, FOLDER, f"{idx}.pt"))
             
             # if SAVE_GT:
-            #     os.makedirs(os.path.join("eval_objects", DOMAIN, "gt"), exist_ok=True)
-            #     torch.save(sq_masks.cpu(), os.path.join("eval_objects", DOMAIN, "gt", f"{idx}.pt"))
+            #     os.makedirs(os.path.join(ROOT, DOMAIN, "gt"), exist_ok=True)
+            #     torch.save(sq_masks.cpu(), os.path.join(ROOT, DOMAIN, "gt", f"{idx}.pt"))
                 
             # Update mIoU metric
             metric.update(pred, masks)
